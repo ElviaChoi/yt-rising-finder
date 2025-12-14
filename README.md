@@ -1,4 +1,4 @@
-# 해피뷰어 - YouTube 키워드 검색 도구
+# YouTube 키워드 검색 도구
 
 React + Vite + Tailwind CSS로 만든 YouTube 키워드 검색 애플리케이션입니다.
 
