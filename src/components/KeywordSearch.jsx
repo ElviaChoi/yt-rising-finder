@@ -19,7 +19,7 @@ const tabProfiles = {
     description: '구독자보다 조회수가 크게 튄 영상을 찾는 모드입니다.',
     filters: {
       minViews: '10000',
-      subscriberLimit: '50000',
+      subscriberLimit: '30000',
       length: '15plus',
       sortBy: 'risingScore',
       countryCode: 'KR',
@@ -79,12 +79,14 @@ const readStoredArray = (key) => {
 const initialPreset = topicPresets[0];
 
 const KeywordSearch = ({ activeTab }) => {
-  const [filters, setFilters] = useState({
+  const initialFilters = {
     presetId: initialPreset.id,
     keyword: '',
     duration: '90',
     ...tabProfiles.rising.filters,
-  });
+  };
+  const [filters, setFilters] = useState(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
   const [results, setResults] = useState([]);
   const [savedVideos, setSavedVideos] = useState(() => readStoredArray(STORAGE_KEYS.saved));
   const [hiddenVideoIds, setHiddenVideoIds] = useState(() => readStoredArray(STORAGE_KEYS.hidden));
@@ -96,10 +98,14 @@ const KeywordSearch = ({ activeTab }) => {
 
   useEffect(() => {
     if (activeTab === 'archive') return;
-    setFilters((prev) => ({
-      ...prev,
-      ...activeProfile.filters,
-    }));
+    setFilters((prev) => {
+      const nextFilters = {
+        ...prev,
+        ...activeProfile.filters,
+      };
+      setAppliedFilters(nextFilters);
+      return nextFilters;
+    });
   }, [activeTab]);
 
   const selectedPreset = useMemo(
@@ -141,35 +147,39 @@ const KeywordSearch = ({ activeTab }) => {
     return Array.from(new Set(queries)).slice(0, maxKeywords);
   };
 
-  const applyFilters = (videos) => {
-    const minViews = Number(filters.minViews);
-    const subscriberLimit = Number(filters.subscriberLimit);
+  const applyFilters = (videos, filterSet = appliedFilters) => {
+    const minViews = Number(filterSet.minViews);
+    const subscriberLimit = Number(filterSet.subscriberLimit);
 
     return videos.filter((video) => {
       const metrics = video.metrics;
       if (hiddenVideoIds.includes(video.videoId)) return false;
       if (metrics.views < minViews) return false;
       if (metrics.subscribers > subscriberLimit) return false;
-      if (filters.length === 'shortsOut' && metrics.durationMinutes < 1.2) return false;
-      if (filters.length === '8plus' && metrics.durationMinutes < 8) return false;
-      if (filters.length === '15plus' && metrics.durationMinutes < 15) return false;
-      if (filters.length === '30plus' && metrics.durationMinutes < 30) return false;
-      if (filters.length === '40plus' && metrics.durationMinutes < 40) return false;
-      if (filters.length === '60plus' && metrics.durationMinutes < 60) return false;
+      if (filterSet.length === 'shortsOut' && metrics.durationMinutes < 3) return false;
+      if (filterSet.length === '8plus' && metrics.durationMinutes < 8) return false;
+      if (filterSet.length === '15plus' && metrics.durationMinutes < 15) return false;
+      if (filterSet.length === '30plus' && metrics.durationMinutes < 30) return false;
+      if (filterSet.length === '40plus' && metrics.durationMinutes < 40) return false;
+      if (filterSet.length === '60plus' && metrics.durationMinutes < 60) return false;
       return true;
     });
   };
 
-  const sortVideos = (videos) => {
+  const sortVideos = (videos, filterSet = appliedFilters) => {
     return [...videos].sort((a, b) => {
-      if (filters.sortBy === 'publishedAt') {
+      if (filterSet.sortBy === 'publishedAt') {
         return new Date(b.snippet.publishedAt).getTime() - new Date(a.snippet.publishedAt).getTime();
       }
 
-      const aMetric = a.metrics?.[filters.sortBy] ?? a[filters.sortBy] ?? 0;
-      const bMetric = b.metrics?.[filters.sortBy] ?? b[filters.sortBy] ?? 0;
+      const aMetric = a.metrics?.[filterSet.sortBy] ?? a[filterSet.sortBy] ?? 0;
+      const bMetric = b.metrics?.[filterSet.sortBy] ?? b[filterSet.sortBy] ?? 0;
       return bMetric - aMetric;
     });
+  };
+
+  const applyCurrentFilters = () => {
+    setAppliedFilters({ ...filters });
   };
 
   const runSearch = async () => {
@@ -232,7 +242,8 @@ const KeywordSearch = ({ activeTab }) => {
       }
 
       const uniqueVideos = Array.from(new Map(collected.map((video) => [video.videoId, video])).values());
-      setResults(sortVideos(applyFilters(uniqueVideos)));
+      setResults(uniqueVideos);
+      setAppliedFilters(filters);
       setProgress('');
     } catch (searchError) {
       console.error(searchError);
@@ -271,16 +282,13 @@ const KeywordSearch = ({ activeTab }) => {
 
   const visibleVideos = useMemo(() => {
     if (activeTab === 'archive') return savedVideos;
-    return sortVideos(applyFilters(results));
+    return sortVideos(applyFilters(results, appliedFilters), appliedFilters);
   }, [
     activeTab,
     savedVideos,
     results,
     hiddenVideoIds,
-    filters.sortBy,
-    filters.minViews,
-    filters.subscriberLimit,
-    filters.length,
+    appliedFilters,
   ]);
 
   const summary = useMemo(() => {
@@ -327,6 +335,10 @@ const KeywordSearch = ({ activeTab }) => {
         onFilterChange={handleFilterChange}
         onPresetSelect={handlePresetSelect}
         activeTab={activeTab}
+        onApplyFilters={applyCurrentFilters}
+        hasResults={results.length > 0}
+        rawResultCount={results.length}
+        appliedFilters={appliedFilters}
       />
 
       <section className="min-w-0 space-y-5">
