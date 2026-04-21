@@ -1,31 +1,18 @@
 import { useState } from 'react';
 import Header from './components/Header';
 import KeywordSearch from './components/KeywordSearch';
-import HotTrend from './components/HotTrend';
 
 function App() {
-  const [activeTab, setActiveTab] = useState('keyword');
-
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'keyword':
-        return <KeywordSearch />;
-      case 'trend':
-        return <HotTrend />;
-      default:
-        return <KeywordSearch />;
-    }
-  };
+  const [activeTab, setActiveTab] = useState('rising');
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen w-full overflow-x-hidden bg-slate-50 text-slate-950">
       <Header activeTab={activeTab} onTabChange={setActiveTab} />
-      <main>
-        {renderTabContent()}
+      <main className="w-full min-w-0">
+        <KeywordSearch activeTab={activeTab} />
       </main>
     </div>
   );
 }
 
 export default App;
-

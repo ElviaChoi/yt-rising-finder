@@ -1,290 +1,418 @@
-import { useState } from 'react';
-import { searchVideos, getVideoDetails, getChannelInfo } from '../services/youtubeApi';
-import { calculateHourlyViews, getDateRange, parseDuration } from '../utils/dateCalculator';
+import { useEffect, useMemo, useState } from 'react';
+import { expansionPresets, topicPresets } from '../data/topicPresets';
+import { getChannelInfo, getVideoDetails, searchVideos } from '../services/youtubeApi';
+import { getDateRange } from '../utils/dateCalculator';
 import { exportToCSV } from '../utils/csvExporter';
+import { enrichVideo } from '../utils/videoMetrics';
 import SearchFilters from './SearchFilters';
 import VideoPreview from './VideoPreview';
 import VideoTable from './VideoTable';
 
-const KeywordSearch = () => {
-  const [filters, setFilters] = useState({
-    keyword: '',
-    countryCode: 'KR',
-    duration: '2달',
-    thumbnailSize: '100x75',
-    length: '15분~60분',
-    minViews: '10000',
-    subscriberLimit: '10000',
-    maxResults: '150',
-    minHourlyViews: '미적용',
-    sortStandard: '구독자',
-    sortOrder: '오름차순'
-  });
+const STORAGE_KEYS = {
+  saved: 'seniorFinder.savedVideos',
+  hidden: 'seniorFinder.hiddenVideos',
+};
 
+const tabProfiles = {
+  rising: {
+    title: '작은 채널 떡상 후보',
+    description: '구독자보다 조회수가 크게 튄 영상을 찾는 모드입니다.',
+    filters: {
+      minViews: '10000',
+      subscriberLimit: '50000',
+      length: '15plus',
+      sortBy: 'risingScore',
+      countryCode: 'KR',
+      expansionId: 'none',
+      maxKeywords: '8',
+    },
+  },
+  daily: {
+    title: '넓게 소재 탐색',
+    description: '카테고리 안의 소재를 넓게 훑는 모드입니다. 좋은 소재가 보이면 조건을 좁혀보세요.',
+    filters: {
+      minViews: '10000',
+      subscriberLimit: '999999999',
+      length: 'shortsOut',
+      sortBy: 'views',
+      countryCode: 'KR',
+      expansionId: 'none',
+      maxKeywords: '12',
+    },
+  },
+  competitor: {
+    title: '해외/경쟁 벤치마킹',
+    description: '국가를 전세계나 미국으로 바꾸고, 큰 채널의 제목/썸네일/소재 패턴을 참고하는 모드입니다.',
+    filters: {
+      minViews: '10000',
+      subscriberLimit: '999999999',
+      length: '8plus',
+      sortBy: 'views',
+      countryCode: 'ALL',
+      expansionId: 'none',
+      maxKeywords: '12',
+    },
+  },
+  keyword: {
+    title: '키워드 실험',
+    description: '직접 키워드를 넣고 검색 확장 표현을 붙여가며 후보를 테스트합니다.',
+    filters: {
+      minViews: '10000',
+      subscriberLimit: '999999999',
+      length: 'shortsOut',
+      sortBy: 'risingScore',
+      countryCode: 'KR',
+      expansionId: 'question',
+      maxKeywords: '8',
+    },
+  },
+};
+
+const readStoredArray = (key) => {
+  try {
+    return JSON.parse(localStorage.getItem(key) || '[]');
+  } catch {
+    return [];
+  }
+};
+
+const initialPreset = topicPresets[0];
+
+const KeywordSearch = ({ activeTab }) => {
+  const [filters, setFilters] = useState({
+    presetId: initialPreset.id,
+    keyword: '',
+    duration: '90',
+    ...tabProfiles.rising.filters,
+  });
   const [results, setResults] = useState([]);
-  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [savedVideos, setSavedVideos] = useState(() => readStoredArray(STORAGE_KEYS.saved));
+  const [hiddenVideoIds, setHiddenVideoIds] = useState(() => readStoredArray(STORAGE_KEYS.hidden));
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [progress, setProgress] = useState('');
+  const [error, setError] = useState('');
+
+  const activeProfile = tabProfiles[activeTab] || tabProfiles.rising;
+
+  useEffect(() => {
+    if (activeTab === 'archive') return;
+    setFilters((prev) => ({
+      ...prev,
+      ...activeProfile.filters,
+    }));
+  }, [activeTab]);
+
+  const selectedPreset = useMemo(
+    () => topicPresets.find((preset) => preset.id === filters.presetId) || initialPreset,
+    [filters.presetId]
+  );
+
+  const savedVideoIds = useMemo(() => savedVideos.map((video) => video.videoId), [savedVideos]);
 
   const handleFilterChange = (name, value) => {
-    setFilters(prev => ({ ...prev, [name]: value }));
+    setFilters((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handlePresetSelect = (preset) => {
+    setFilters((prev) => ({ ...prev, presetId: preset.id }));
+  };
+
+  const buildSearchQueries = () => {
+    const manualKeyword = filters.keyword.trim();
+    const expansion = expansionPresets.find((preset) => preset.id === filters.expansionId);
+    const baseQueries = manualKeyword ? [manualKeyword] : selectedPreset.keywords;
+    const maxKeywords = Number(filters.maxKeywords);
+    const queries = [];
+
+    baseQueries.forEach((query) => {
+      if (queries.length < maxKeywords) queries.push(query);
+    });
+
+    if (queries.length < maxKeywords) {
+      for (const baseQuery of baseQueries) {
+        for (const boost of expansion?.queryBoosts || []) {
+          if (queries.length >= maxKeywords) break;
+          queries.push(`${baseQuery} ${boost}`);
+        }
+        if (queries.length >= maxKeywords) break;
+      }
+    }
+
+    return Array.from(new Set(queries)).slice(0, maxKeywords);
   };
 
   const applyFilters = (videos) => {
-    return videos.filter(video => {
-      // 길이 필터
-      const videoMinutes = parseDuration(video.contentDetails?.duration || 'PT0M');
-      
-      // 15분 이하 영상은 모두 제외
-      if (videoMinutes <= 15) return false;
-      
-      if (filters.length === '15분~60분' && videoMinutes > 60) return false;
-      if (filters.length === '60분 이상' && videoMinutes <= 60) return false;
+    const minViews = Number(filters.minViews);
+    const subscriberLimit = Number(filters.subscriberLimit);
 
-      // 최소 조회수
-      const views = parseInt(video.statistics?.viewCount || 0);
-      if (views < parseInt(filters.minViews)) return false;
-
-      // 구독자 상한
-      const subscribers = parseInt(video.channelSubscribers || 0);
-      if (subscribers > parseInt(filters.subscriberLimit)) return false;
-
-      // 최소 시간당 조회수
-      if (filters.minHourlyViews !== '미적용') {
-        const hourlyViews = calculateHourlyViews(views, video.snippet.publishedAt);
-        if (hourlyViews < parseInt(filters.minHourlyViews)) return false;
-      }
-
+    return videos.filter((video) => {
+      const metrics = video.metrics;
+      if (hiddenVideoIds.includes(video.videoId)) return false;
+      if (metrics.views < minViews) return false;
+      if (metrics.subscribers > subscriberLimit) return false;
+      if (filters.length === 'shortsOut' && metrics.durationMinutes < 1.2) return false;
+      if (filters.length === '8plus' && metrics.durationMinutes < 8) return false;
+      if (filters.length === '15plus' && metrics.durationMinutes < 15) return false;
+      if (filters.length === '30plus' && metrics.durationMinutes < 30) return false;
+      if (filters.length === '40plus' && metrics.durationMinutes < 40) return false;
+      if (filters.length === '60plus' && metrics.durationMinutes < 60) return false;
       return true;
     });
   };
 
-  const sortResults = (videos) => {
-    const sorted = [...videos];
-    const order = filters.sortOrder === '오름차순' ? 1 : -1;
-
-    sorted.sort((a, b) => {
-      let aVal, bVal;
-
-      switch (filters.sortStandard) {
-        case '구독자':
-          aVal = parseInt(a.channelSubscribers || 0);
-          bVal = parseInt(b.channelSubscribers || 0);
-          break;
-        case '조회수':
-          aVal = parseInt(a.statistics?.viewCount || 0);
-          bVal = parseInt(b.statistics?.viewCount || 0);
-          break;
-        case '시간당조회수':
-          aVal = calculateHourlyViews(
-            parseInt(a.statistics?.viewCount || 0),
-            a.snippet.publishedAt
-          );
-          bVal = calculateHourlyViews(
-            parseInt(b.statistics?.viewCount || 0),
-            b.snippet.publishedAt
-          );
-          break;
-        case '업로드일':
-          aVal = new Date(a.snippet.publishedAt).getTime();
-          bVal = new Date(b.snippet.publishedAt).getTime();
-          break;
-        default:
-          return 0;
+  const sortVideos = (videos) => {
+    return [...videos].sort((a, b) => {
+      if (filters.sortBy === 'publishedAt') {
+        return new Date(b.snippet.publishedAt).getTime() - new Date(a.snippet.publishedAt).getTime();
       }
 
-      return (aVal - bVal) * order;
+      const aMetric = a.metrics?.[filters.sortBy] ?? a[filters.sortBy] ?? 0;
+      const bMetric = b.metrics?.[filters.sortBy] ?? b[filters.sortBy] ?? 0;
+      return bMetric - aMetric;
     });
-
-    return sorted;
   };
 
-  const handleSearch = async () => {
-    if (!filters.keyword.trim()) {
-      alert('키워드를 입력해주세요.');
+  const runSearch = async () => {
+    if (!import.meta.env.VITE_YOUTUBE_API_KEY) {
+      setError('.env 파일에 VITE_YOUTUBE_API_KEY가 필요합니다.');
       return;
     }
 
-    if (!import.meta.env.VITE_YOUTUBE_API_KEY) {
-      alert('YouTube API 키가 설정되지 않았습니다. .env 파일에 VITE_YOUTUBE_API_KEY를 추가해주세요.');
+    const queries = buildSearchQueries();
+    if (queries.length === 0) {
+      setError('검색할 키워드가 없습니다.');
       return;
     }
 
     setLoading(true);
+    setError('');
+    setProgress('검색 준비 중');
     setResults([]);
-    setSelectedVideo(null);
 
     try {
       const dateRange = getDateRange(filters.duration);
-      const maxResults = parseInt(filters.maxResults);
-      
-      // 여러 페이지에서 데이터 가져오기
-      let allVideos = [];
-      let nextPageToken = null;
-      let pageCount = 0;
-      const maxPages = Math.ceil(maxResults / 50);
+      const collected = [];
 
-      do {
-        setProgress({ current: Math.min(pageCount * 50, maxResults), total: maxResults });
-        
+      for (let index = 0; index < queries.length; index += 1) {
+        const query = queries[index];
+        setProgress(`${index + 1}/${queries.length} - "${query}" 검색 중`);
+
         const searchResponse = await searchVideos({
-          keyword: filters.keyword,
-          regionCode: filters.countryCode || undefined,
-          maxResults: 50,
-          order: 'date',
-          pageToken: nextPageToken,
-          ...dateRange
+          keyword: query,
+          regionCode: filters.countryCode,
+          maxResults: activeTab === 'keyword' ? 40 : 30,
+          order: activeTab === 'rising' ? 'date' : 'relevance',
+          ...dateRange,
         });
 
-        if (!searchResponse.items || searchResponse.items.length === 0) {
-          break;
-        }
+        const videoIds = (searchResponse.items || []).map((item) => item.id.videoId).filter(Boolean);
+        if (videoIds.length === 0) continue;
 
-        const videoIds = searchResponse.items.map(item => item.id.videoId);
-        
-        // 비디오 상세 정보 조회
-        const videoDetails = await getVideoDetails(videoIds);
-        
-        // 채널 ID 추출 및 조회
-        const channelIds = [...new Set(videoDetails.map(v => v.snippet.channelId))];
-        const channelInfo = await getChannelInfo(channelIds);
-        const channelMap = {};
-        channelInfo.forEach(ch => {
-          channelMap[ch.id] = parseInt(ch.statistics?.subscriberCount || 0);
+        const details = await getVideoDetails(videoIds);
+        const channelIds = [...new Set(details.map((video) => video.snippet.channelId))];
+        const channels = await getChannelInfo(channelIds);
+        const channelMap = Object.fromEntries(
+          channels.map((channel) => [channel.id, Number(channel.statistics?.subscriberCount || 0)])
+        );
+
+        details.forEach((video) => {
+          collected.push(
+            enrichVideo(
+              {
+                ...video,
+                videoId: video.id,
+                channelSubscribers: channelMap[video.snippet.channelId] || 0,
+              },
+              query
+            )
+          );
         });
 
-        // 데이터 합치기
-        const videosWithDetails = videoDetails.map(video => ({
-          ...video,
-          channelSubscribers: channelMap[video.snippet.channelId] || 0,
-          videoId: video.id
-        }));
-
-        allVideos = [...allVideos, ...videosWithDetails];
-        nextPageToken = searchResponse.nextPageToken;
-        pageCount++;
-
-        // 할당량 고려하여 약간의 지연
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // 최대 페이지 수 또는 최대 결과 수에 도달하면 중단
-        if (pageCount >= maxPages || allVideos.length >= maxResults) {
-          break;
-        }
-      } while (nextPageToken);
-
-      // 필터링 및 정렬 적용
-      let filteredVideos = applyFilters(allVideos);
-      filteredVideos = sortResults(filteredVideos);
-      filteredVideos = filteredVideos.slice(0, maxResults);
-
-      setResults(filteredVideos);
-      
-      if (filteredVideos.length > 0) {
-        setSelectedVideo(filteredVideos[0]);
-      } else {
-        alert('필터 조건에 맞는 결과가 없습니다.');
+        await new Promise((resolve) => setTimeout(resolve, 80));
       }
-    } catch (error) {
-      console.error('검색 오류:', error);
-      if (error.response?.status === 403) {
-        alert('YouTube API 키가 유효하지 않거나 할당량이 초과되었습니다.');
-      } else if (error.response?.status === 400) {
-        alert('검색 요청에 오류가 있습니다. 국가코드 등을 확인해주세요.');
+
+      const uniqueVideos = Array.from(new Map(collected.map((video) => [video.videoId, video])).values());
+      setResults(sortVideos(applyFilters(uniqueVideos)));
+      setProgress('');
+    } catch (searchError) {
+      console.error(searchError);
+      if (searchError.response?.status === 403) {
+        setError('YouTube API 키, 권한, 일일 할당량을 확인해주세요.');
       } else {
-        alert('검색 중 오류가 발생했습니다: ' + (error.message || '알 수 없는 오류'));
+        setError(`검색 중 오류가 발생했습니다: ${searchError.message || '알 수 없는 오류'}`);
       }
     } finally {
       setLoading(false);
-      setProgress({ current: 0, total: 0 });
+      setProgress('');
     }
   };
 
-  const handleCSVExport = () => {
-    if (results.length === 0) {
-      alert('저장할 데이터가 없습니다. 먼저 검색을 실행해주세요.');
-      return;
-    }
+  const saveVideo = (video) => {
+    setSavedVideos((prev) => {
+      const exists = prev.some((item) => item.videoId === video.videoId);
+      const next = exists ? prev.filter((item) => item.videoId !== video.videoId) : [video, ...prev];
+      localStorage.setItem(STORAGE_KEYS.saved, JSON.stringify(next));
+      return next;
+    });
+  };
 
-    const csvData = results.map(video => ({
+  const hideVideo = (video) => {
+    setHiddenVideoIds((prev) => {
+      const next = Array.from(new Set([video.videoId, ...prev]));
+      localStorage.setItem(STORAGE_KEYS.hidden, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const restoreHiddenVideos = () => {
+    setHiddenVideoIds([]);
+    localStorage.setItem(STORAGE_KEYS.hidden, JSON.stringify([]));
+  };
+
+  const visibleVideos = useMemo(() => {
+    if (activeTab === 'archive') return savedVideos;
+    return sortVideos(applyFilters(results));
+  }, [
+    activeTab,
+    savedVideos,
+    results,
+    hiddenVideoIds,
+    filters.sortBy,
+    filters.minViews,
+    filters.subscriberLimit,
+    filters.length,
+  ]);
+
+  const summary = useMemo(() => {
+    const top = visibleVideos[0];
+    const avgRatio =
+      visibleVideos.length > 0
+        ? visibleVideos.reduce((sum, video) => sum + video.metrics.viewSubscriberRatio, 0) / visibleVideos.length
+        : 0;
+
+    return {
+      count: visibleVideos.length,
+      top,
+      avgRatio,
+      savedCount: savedVideos.length,
+      hiddenCount: hiddenVideoIds.length,
+    };
+  }, [visibleVideos, savedVideos.length, hiddenVideoIds.length]);
+
+  const exportResults = () => {
+    const csvData = visibleVideos.map((video) => ({
+      risingScore: video.metrics.risingScore,
       title: video.snippet.title,
       channelTitle: video.snippet.channelTitle,
-      subscriberCount: video.channelSubscribers || 0,
+      subscriberCount: video.metrics.subscribers,
+      viewCount: video.metrics.views,
+      viewSubscriberRatio: video.metrics.viewSubscriberRatio.toFixed(1),
+      hourlyViews: video.metrics.hourlyViews,
+      commentCount: video.metrics.comments,
+      duration: video.metrics.durationMinutes,
       publishedAt: video.snippet.publishedAt.split('T')[0],
-      viewCount: parseInt(video.statistics?.viewCount || 0),
-      hourlyViews: calculateHourlyViews(
-        parseInt(video.statistics?.viewCount || 0),
-        video.snippet.publishedAt
-      ),
-      duration: parseDuration(video.contentDetails?.duration || 'PT0M'),
-      videoId: video.videoId
+      searchedKeyword: video.searchedKeyword,
+      videoId: video.videoId,
     }));
 
-    exportToCSV(csvData, `youtube_search_${filters.keyword}_${Date.now()}.csv`);
+    exportToCSV(csvData, `senior_youtube_finder_${Date.now()}.csv`);
   };
 
+  const isArchive = activeTab === 'archive';
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">키워드 검색 설정</h2>
-          <SearchFilters filters={filters} onFilterChange={handleFilterChange} />
-          
-          <div className="flex gap-4 mt-6">
-            <button 
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
-              onClick={handleSearch}
-              disabled={loading}
-            >
-              {loading ? `검색 중... (${progress.current}/${progress.total})` : '검색 실행'}
-            </button>
-            <button 
-              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
-              onClick={handleCSVExport}
-              disabled={results.length === 0 || loading}
-            >
-              CSV 저장
-            </button>
+    <div className="mx-auto grid w-full max-w-[1500px] grid-cols-1 gap-5 overflow-x-hidden px-4 py-6 sm:px-6 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] lg:px-8">
+      <SearchFilters
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onPresetSelect={handlePresetSelect}
+        activeTab={activeTab}
+      />
+
+      <section className="min-w-0 space-y-5">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <p className="text-sm font-bold text-blue-700">{selectedPreset.label}</p>
+              <h2 className="mt-1 text-2xl font-black text-slate-950">
+                {isArchive ? '보관한 영상' : activeProfile.title}
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                {isArchive
+                  ? '저장해둔 영상을 다시 확인합니다. 데이터는 이 브라우저에만 저장됩니다.'
+                  : activeProfile.description}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {!isArchive && (
+                <button
+                  type="button"
+                  onClick={runSearch}
+                  disabled={loading}
+                  className="rounded-md bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:bg-slate-300"
+                >
+                  {loading ? progress || '검색 중' : '후보 찾기'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={exportResults}
+                disabled={visibleVideos.length === 0}
+                className="rounded-md bg-slate-950 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:bg-slate-300"
+              >
+                CSV 다운로드
+              </button>
+              {summary.hiddenCount > 0 && (
+                <button
+                  type="button"
+                  onClick={restoreHiddenVideos}
+                  className="rounded-md bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-200"
+                >
+                  제외 초기화
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        {loading && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <div className="flex items-center gap-2">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-              <span className="text-blue-800">
-                검색 중... {progress.current}/{progress.total}
-              </span>
-            </div>
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {error}
           </div>
         )}
 
-        {results.length > 0 && (
-          <>
-            <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-              <p className="text-lg font-medium text-gray-900">
-                완료: {results.length}개 영상
-              </p>
-            </div>
-            
-            {selectedVideo && (
-              <VideoPreview 
-                video={selectedVideo} 
-                thumbnailSize={filters.thumbnailSize}
-              />
-            )}
-            
-            <VideoTable 
-              videos={results}
-              onVideoSelect={setSelectedVideo}
-              filters={filters}
-            />
-          </>
-        )}
-      </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-bold text-slate-500">결과</p>
+            <p className="mt-1 text-2xl font-black text-slate-950">{summary.count.toLocaleString('ko-KR')}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-bold text-slate-500">평균 조회/구독</p>
+            <p className="mt-1 text-2xl font-black text-slate-950">{summary.avgRatio.toFixed(1)}배</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-bold text-slate-500">보관함</p>
+            <p className="mt-1 text-2xl font-black text-slate-950">{summary.savedCount.toLocaleString('ko-KR')}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-bold text-slate-500">제외</p>
+            <p className="mt-1 text-2xl font-black text-slate-950">{summary.hiddenCount.toLocaleString('ko-KR')}</p>
+          </div>
+        </div>
+
+        {summary.top && !isArchive && <VideoPreview video={summary.top} />}
+
+        <VideoTable
+          videos={visibleVideos}
+          onSave={saveVideo}
+          onHide={hideVideo}
+          savedVideoIds={savedVideoIds}
+          hiddenVideoIds={hiddenVideoIds}
+        />
+      </section>
     </div>
   );
 };
 
 export default KeywordSearch;
-
