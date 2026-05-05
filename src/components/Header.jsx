@@ -7,7 +7,7 @@ const Header = ({ activeTab, onTabChange }) => {
         <div className="mb-4 flex flex-col gap-1">
           <p className="text-sm font-semibold text-blue-700">Senior YouTube Finder</p>
           <h1 className="text-2xl font-bold tracking-normal text-slate-950">
-            작은 채널의 떡상 소재 찾기
+            작은 채널 롱폼 소재 검증
           </h1>
         </div>
         <Navigation activeTab={activeTab} onTabChange={onTabChange} />

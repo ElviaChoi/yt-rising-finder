@@ -3,11 +3,11 @@ import { getVideoMetrics } from '../utils/videoMetrics';
 
 const formatNumber = (value) => Number(value || 0).toLocaleString('ko-KR');
 
-const VideoTable = ({ videos, onSave, onHide, savedVideoIds = [], hiddenVideoIds = [] }) => {
+const VideoTable = ({ videos, onSave, onHide, savedVideoIds = [], hiddenVideoIds = [], emptyMessage }) => {
   if (!videos || videos.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 bg-white px-6 py-16 text-center text-slate-500">
-        조건에 맞는 영상이 없습니다. 카테고리나 최소 조회수를 조금 넓혀보세요.
+        {emptyMessage || '검색은 되었지만 현재 필터를 통과한 영상이 없습니다. 조건을 완화해보세요.'}
       </div>
     );
   }
@@ -21,7 +21,7 @@ const VideoTable = ({ videos, onSave, onHide, savedVideoIds = [], hiddenVideoIds
               <th className="px-3 py-3 text-left text-xs font-semibold">썸네일</th>
               <th className="px-3 py-3 text-left text-xs font-semibold">제목</th>
               <th className="px-3 py-3 text-left text-xs font-semibold">채널</th>
-              <th className="px-3 py-3 text-right text-xs font-semibold">떡상지수</th>
+              <th className="px-3 py-3 text-right text-xs font-semibold">기회점수</th>
               <th className="px-3 py-3 text-right text-xs font-semibold">구독자</th>
               <th className="px-3 py-3 text-right text-xs font-semibold">조회수</th>
               <th className="px-3 py-3 text-right text-xs font-semibold">조회/구독</th>
@@ -70,7 +70,12 @@ const VideoTable = ({ videos, onSave, onHide, savedVideoIds = [], hiddenVideoIds
                           {video.searchedKeyword}
                         </span>
                       )}
-                      {metrics.subscribers <= 10000 && (
+                      {metrics.hasHiddenSubscribers && (
+                        <span className="rounded bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
+                          구독자 미공개
+                        </span>
+                      )}
+                      {!metrics.hasHiddenSubscribers && metrics.subscribers <= 10000 && (
                         <span className="rounded bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
                           1만 이하
                         </span>
@@ -95,10 +100,12 @@ const VideoTable = ({ videos, onSave, onHide, savedVideoIds = [], hiddenVideoIds
                   <td className="px-3 py-3 text-right align-top text-sm font-black text-rose-600">
                     {metrics.risingScore}
                   </td>
-                  <td className="px-3 py-3 text-right align-top text-sm">{formatNumber(metrics.subscribers)}</td>
+                  <td className="px-3 py-3 text-right align-top text-sm">
+                    {metrics.hasHiddenSubscribers ? '미공개' : formatNumber(metrics.subscribers)}
+                  </td>
                   <td className="px-3 py-3 text-right align-top text-sm font-semibold">{formatNumber(metrics.views)}</td>
                   <td className="px-3 py-3 text-right align-top text-sm">
-                    {metrics.viewSubscriberRatio.toFixed(1)}배
+                    {metrics.hasHiddenSubscribers ? '참고' : `${metrics.viewSubscriberRatio.toFixed(1)}배`}
                   </td>
                   <td className="px-3 py-3 text-right align-top text-sm">{formatNumber(metrics.hourlyViews)}</td>
                   <td className="px-3 py-3 text-right align-top text-sm">{formatNumber(metrics.comments)}</td>

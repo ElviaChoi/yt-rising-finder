@@ -22,6 +22,7 @@ const lengthLabels = {
   all: '전체',
   shortsOut: '쇼츠 제외(3분 미만 제외)',
   '8plus': '8분 이상',
+  '12plus': '12분 이상',
   '15plus': '15분 이상',
   '30plus': '30분 이상',
   '40plus': '40분 이상',
@@ -48,10 +49,14 @@ const SearchFilters = ({
   onFilterChange,
   onPresetSelect,
   activeTab,
+  onRunSearch,
+  loading,
+  progress,
   onApplyFilters,
   hasResults,
   rawResultCount = 0,
   appliedFilters,
+  estimatedSearchCalls = 0,
 }) => {
   const selectedExpansion = expansionPresets.find((preset) => preset.id === filters.expansionId);
   const applied = appliedFilters || filters;
@@ -62,7 +67,7 @@ const SearchFilters = ({
         <div className="mb-3">
           <h2 className="text-lg font-bold text-slate-950">소재 카테고리</h2>
           <p className="mt-1 text-sm leading-5 text-slate-500">
-            큰 주제로 먼저 넓게 찾고, 결과가 많을 때 아래 필터로 좁혀보세요.
+            큰 주제로 영상 풀을 모은 뒤, 작은 채널 롱폼 기회를 필터로 검증합니다.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -106,7 +111,7 @@ const SearchFilters = ({
             <input
               value={filters.keyword}
               onChange={(event) => onFilterChange('keyword', event.target.value)}
-              placeholder="예: 짚신, 중세 화장실, 조선 백성"
+              placeholder="예: 노후 생활비, 세계경제, 인간관계"
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </label>
@@ -171,7 +176,22 @@ const SearchFilters = ({
               <option value="12">넓게</option>
               <option value="16">아주 넓게</option>
             </select>
+            <p className="mt-1 text-xs text-slate-500">
+              예상 검색 호출 {estimatedSearchCalls.toLocaleString('ko-KR')}회, 약{' '}
+              {(estimatedSearchCalls * 100).toLocaleString('ko-KR')} quota
+            </p>
           </label>
+
+          {activeTab !== 'archive' && (
+            <button
+              type="button"
+              onClick={onRunSearch}
+              disabled={loading}
+              className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:bg-slate-300"
+            >
+              {loading ? progress || '검색 중' : '이 조건으로 후보 찾기'}
+            </button>
+          )}
 
           <div className="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
             결과 필터
@@ -223,10 +243,11 @@ const SearchFilters = ({
                 onChange={(event) => onFilterChange('length', event.target.value)}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
-                <option value="all">전체</option>
-                <option value="shortsOut">쇼츠 제외(3분 미만)</option>
-                <option value="8plus">8분 이상</option>
-                <option value="15plus">15분 이상</option>
+              <option value="all">전체</option>
+              <option value="shortsOut">쇼츠 제외(3분 미만)</option>
+              <option value="8plus">8분 이상</option>
+              <option value="12plus">12분 이상</option>
+              <option value="15plus">15분 이상</option>
                 <option value="30plus">30분 이상</option>
                 <option value="40plus">40분 이상</option>
                 <option value="60plus">60분 이상</option>
@@ -240,7 +261,7 @@ const SearchFilters = ({
                 onChange={(event) => onFilterChange('sortBy', event.target.value)}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
-                <option value="risingScore">떡상지수 높은 순</option>
+                <option value="risingScore">기회점수 높은 순</option>
                 <option value="viewSubscriberRatio">조회수/구독자 높은 순</option>
                 <option value="hourlyViews">시간당 조회수 높은 순</option>
                 <option value="views">조회수 높은 순</option>
@@ -264,7 +285,7 @@ const SearchFilters = ({
 
           {activeTab === 'competitor' && (
             <div className="rounded-md bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-              해외/경쟁 벤치마킹은 구독자 상한을 제한 없음으로 두고, 국가는 전세계나 미국으로 바꾸면 더 넓게 볼 수 있습니다.
+              해외 원형 참고는 국내 후보 발굴이 아니라, 영어권/일본어권에서 반복되는 소재 구조를 확인하는 모드입니다.
             </div>
           )}
         </div>

@@ -1,8 +1,7 @@
 const tabs = [
-  { id: 'rising', label: '떡상 후보' },
-  { id: 'daily', label: '넓게 탐색' },
-  { id: 'competitor', label: '해외/경쟁 벤치마킹' },
-  { id: 'keyword', label: '키워드 실험' },
+  { id: 'rising', label: '작은 채널 롱폼 기회' },
+  { id: 'daily', label: '국내 수요 탐색' },
+  { id: 'competitor', label: '해외 원형 참고' },
   { id: 'archive', label: '보관함' },
 ];
 

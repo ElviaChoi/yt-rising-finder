@@ -6,11 +6,13 @@ const BASE_URL = 'https://www.googleapis.com/youtube/v3';
 export const searchVideos = async ({
   keyword,
   regionCode = 'KR',
+  relevanceLanguage,
   maxResults = 25,
   order = 'date',
   pageToken,
   publishedAfter,
   publishedBefore,
+  videoDuration,
 }) => {
   const params = {
     part: 'snippet',
@@ -22,7 +24,8 @@ export const searchVideos = async ({
     pageToken,
     publishedAfter,
     publishedBefore,
-    relevanceLanguage: regionCode === 'KR' ? 'ko' : undefined,
+    relevanceLanguage: relevanceLanguage || (regionCode === 'KR' ? 'ko' : undefined),
+    videoDuration,
   };
 
   if (regionCode && regionCode !== 'ALL') {

@@ -15,43 +15,50 @@ const STORAGE_KEYS = {
 
 const tabProfiles = {
   rising: {
-    title: '작은 채널 떡상 후보',
-    description: '구독자보다 조회수가 크게 튄 영상을 찾는 모드입니다.',
+    title: '작은 채널 롱폼 기회',
+    description: '최근 90일 안에 작은 채널이 12분 이상 롱폼으로 조회수를 만든 사례를 찾습니다.',
     filters: {
       minViews: '10000',
-      subscriberLimit: '30000',
-      length: '15plus',
+      subscriberLimit: '10000',
+      length: '12plus',
       sortBy: 'risingScore',
+      countryCode: 'KR',
+      expansionId: 'none',
+      maxKeywords: '5',
+    },
+    searchOrder: 'date',
+    searchDurations: ['medium', 'long'],
+  },
+  daily: {
+    title: '국내 수요 탐색',
+    description: '국내에서 이미 조회수를 내는 정보형 롱폼 소재와 제목 패턴을 넓게 확인합니다.',
+    filters: {
+      minViews: '10000',
+      subscriberLimit: '999999999',
+      length: '12plus',
+      sortBy: 'views',
       countryCode: 'KR',
       expansionId: 'none',
       maxKeywords: '8',
     },
-  },
-  daily: {
-    title: '넓게 소재 탐색',
-    description: '카테고리 안의 소재를 넓게 훑는 모드입니다. 좋은 소재가 보이면 조건을 좁혀보세요.',
-    filters: {
-      minViews: '10000',
-      subscriberLimit: '999999999',
-      length: 'shortsOut',
-      sortBy: 'views',
-      countryCode: 'KR',
-      expansionId: 'none',
-      maxKeywords: '12',
-    },
+    searchOrder: 'relevance',
+    searchDurations: ['long'],
   },
   competitor: {
-    title: '해외/경쟁 벤치마킹',
-    description: '국가를 전세계나 미국으로 바꾸고, 큰 채널의 제목/썸네일/소재 패턴을 참고하는 모드입니다.',
+    title: '해외 원형 참고',
+    description: '해외에서 반복되는 세계경제·지리·교양형 소재 원형을 참고하는 모드입니다.',
     filters: {
       minViews: '10000',
       subscriberLimit: '999999999',
-      length: '8plus',
+      length: '12plus',
       sortBy: 'views',
-      countryCode: 'ALL',
+      countryCode: 'US',
       expansionId: 'none',
-      maxKeywords: '12',
+      maxKeywords: '8',
     },
+    searchOrder: 'relevance',
+    searchDurations: ['long'],
+    relevanceLanguage: 'en',
   },
   keyword: {
     title: '키워드 실험',
@@ -59,12 +66,14 @@ const tabProfiles = {
     filters: {
       minViews: '10000',
       subscriberLimit: '999999999',
-      length: 'shortsOut',
+      length: '12plus',
       sortBy: 'risingScore',
       countryCode: 'KR',
       expansionId: 'question',
-      maxKeywords: '8',
+      maxKeywords: '5',
     },
+    searchOrder: 'relevance',
+    searchDurations: ['medium', 'long'],
   },
 };
 
@@ -93,6 +102,9 @@ const KeywordSearch = ({ activeTab }) => {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
+  const [rawSearchCount, setRawSearchCount] = useState(0);
+  const [showHiddenSubscriberVideos, setShowHiddenSubscriberVideos] = useState(false);
 
   const activeProfile = tabProfiles[activeTab] || tabProfiles.rising;
 
@@ -147,23 +159,57 @@ const KeywordSearch = ({ activeTab }) => {
     return Array.from(new Set(queries)).slice(0, maxKeywords);
   };
 
-  const applyFilters = (videos, filterSet = appliedFilters) => {
+  const estimatedSearchCalls = useMemo(() => {
+    const keywordCount = buildSearchQueries().length;
+    const durationCount = activeProfile.searchDurations?.length || 1;
+    return keywordCount * durationCount;
+  }, [filters.keyword, filters.presetId, filters.maxKeywords, filters.expansionId, activeProfile]);
+
+  const passesLengthFilter = (video, length) => {
+    const minutes = video.metrics.durationMinutes;
+    if (length === 'shortsOut') return minutes >= 3;
+    if (length === '8plus') return minutes >= 8;
+    if (length === '12plus') return minutes >= 12;
+    if (length === '15plus') return minutes >= 15;
+    if (length === '30plus') return minutes >= 30;
+    if (length === '40plus') return minutes >= 40;
+    if (length === '60plus') return minutes >= 60;
+    return true;
+  };
+
+  const getFilterBreakdown = (videos, filterSet = appliedFilters) => {
     const minViews = Number(filterSet.minViews);
     const subscriberLimit = Number(filterSet.subscriberLimit);
-
-    return videos.filter((video) => {
-      const metrics = video.metrics;
-      if (hiddenVideoIds.includes(video.videoId)) return false;
-      if (metrics.views < minViews) return false;
-      if (metrics.subscribers > subscriberLimit) return false;
-      if (filterSet.length === 'shortsOut' && metrics.durationMinutes < 3) return false;
-      if (filterSet.length === '8plus' && metrics.durationMinutes < 8) return false;
-      if (filterSet.length === '15plus' && metrics.durationMinutes < 15) return false;
-      if (filterSet.length === '30plus' && metrics.durationMinutes < 30) return false;
-      if (filterSet.length === '40plus' && metrics.durationMinutes < 40) return false;
-      if (filterSet.length === '60plus' && metrics.durationMinutes < 60) return false;
-      return true;
+    const available = videos.filter((video) => !hiddenVideoIds.includes(video.videoId));
+    const afterLength = available.filter((video) => passesLengthFilter(video, filterSet.length));
+    const afterViews = afterLength.filter((video) => video.metrics.views >= minViews);
+    const hiddenSubscriberVideos = afterViews.filter((video) => video.metrics.hasHiddenSubscribers);
+    const visibleSubscriberVideos = afterViews.filter((video) => !video.metrics.hasHiddenSubscribers);
+    const strongVideos = visibleSubscriberVideos.filter((video) => video.metrics.subscribers <= 10000);
+    const referenceVideos = visibleSubscriberVideos.filter(
+      (video) => video.metrics.subscribers > 10000 && video.metrics.subscribers <= 30000
+    );
+    const finalVideos = visibleSubscriberVideos.filter((video) => {
+      if (subscriberLimit === 999999999) return true;
+      return video.metrics.subscribers <= subscriberLimit;
     });
+
+    return {
+      raw: videos.length,
+      available: available.length,
+      afterLength: afterLength.length,
+      afterViews: afterViews.length,
+      hiddenSubscribers: hiddenSubscriberVideos.length,
+      strong: strongVideos.length,
+      reference: referenceVideos.length,
+      final: finalVideos.length,
+      finalVideos,
+      hiddenSubscriberVideos,
+    };
+  };
+
+  const applyFilters = (videos, filterSet = appliedFilters) => {
+    return getFilterBreakdown(videos, filterSet).finalVideos;
   };
 
   const sortVideos = (videos, filterSet = appliedFilters) => {
@@ -195,55 +241,76 @@ const KeywordSearch = ({ activeTab }) => {
     }
 
     setLoading(true);
+    setHasSearched(true);
     setError('');
     setProgress('검색 준비 중');
     setResults([]);
+    setRawSearchCount(0);
+    setShowHiddenSubscriberVideos(false);
 
     try {
       const dateRange = getDateRange(filters.duration);
       const collected = [];
+      const searchDurations = activeProfile.searchDurations || [undefined];
 
       for (let index = 0; index < queries.length; index += 1) {
         const query = queries[index];
-        setProgress(`${index + 1}/${queries.length} - "${query}" 검색 중`);
+        for (let durationIndex = 0; durationIndex < searchDurations.length; durationIndex += 1) {
+          const videoDuration = searchDurations[durationIndex];
+          const durationLabel = videoDuration ? `/${videoDuration}` : '';
+          setProgress(`${index + 1}/${queries.length}${durationLabel} - "${query}" 검색 중`);
 
-        const searchResponse = await searchVideos({
-          keyword: query,
-          regionCode: filters.countryCode,
-          maxResults: activeTab === 'keyword' ? 40 : 30,
-          order: activeTab === 'rising' ? 'date' : 'relevance',
-          ...dateRange,
-        });
+          const searchResponse = await searchVideos({
+            keyword: query,
+            regionCode: filters.countryCode,
+            relevanceLanguage: activeProfile.relevanceLanguage,
+            maxResults: activeTab === 'keyword' ? 40 : 30,
+            order: activeProfile.searchOrder || 'relevance',
+            videoDuration,
+            ...dateRange,
+          });
 
-        const videoIds = (searchResponse.items || []).map((item) => item.id.videoId).filter(Boolean);
-        if (videoIds.length === 0) continue;
+          const videoIds = (searchResponse.items || []).map((item) => item.id.videoId).filter(Boolean);
+          if (videoIds.length === 0) continue;
 
-        const details = await getVideoDetails(videoIds);
-        const channelIds = [...new Set(details.map((video) => video.snippet.channelId))];
-        const channels = await getChannelInfo(channelIds);
-        const channelMap = Object.fromEntries(
-          channels.map((channel) => [channel.id, Number(channel.statistics?.subscriberCount || 0)])
-        );
-
-        details.forEach((video) => {
-          collected.push(
-            enrichVideo(
+          const details = await getVideoDetails(videoIds);
+          const channelIds = [...new Set(details.map((video) => video.snippet.channelId))];
+          const channels = await getChannelInfo(channelIds);
+          const channelMap = Object.fromEntries(
+            channels.map((channel) => [
+              channel.id,
               {
-                ...video,
-                videoId: video.id,
-                channelSubscribers: channelMap[video.snippet.channelId] || 0,
+                subscribers: Number(channel.statistics?.subscriberCount || 0),
+                hiddenSubscriberCount:
+                  channel.statistics?.hiddenSubscriberCount === true ||
+                  channel.statistics?.hiddenSubscriberCount === 'true',
               },
-              query
-            )
+            ])
           );
-        });
 
-        await new Promise((resolve) => setTimeout(resolve, 80));
+          details.forEach((video) => {
+            const channel = channelMap[video.snippet.channelId] || {};
+            collected.push(
+              enrichVideo(
+                {
+                  ...video,
+                  videoId: video.id,
+                  channelSubscribers: channel.subscribers || 0,
+                  hiddenSubscriberCount: channel.hiddenSubscriberCount === true || channel.hiddenSubscriberCount === 'true',
+                },
+                query
+              )
+            );
+          });
+
+          await new Promise((resolve) => setTimeout(resolve, 80));
+        }
       }
 
       const uniqueVideos = Array.from(new Map(collected.map((video) => [video.videoId, video])).values());
       setResults(uniqueVideos);
       setAppliedFilters(filters);
+      setRawSearchCount(collected.length);
       setProgress('');
     } catch (searchError) {
       console.error(searchError);
@@ -280,16 +347,20 @@ const KeywordSearch = ({ activeTab }) => {
     localStorage.setItem(STORAGE_KEYS.hidden, JSON.stringify([]));
   };
 
+  const filterBreakdown = useMemo(() => {
+    if (activeTab === 'archive') return null;
+    return getFilterBreakdown(results, appliedFilters);
+  }, [activeTab, results, hiddenVideoIds, appliedFilters]);
+
   const visibleVideos = useMemo(() => {
     if (activeTab === 'archive') return savedVideos;
-    return sortVideos(applyFilters(results, appliedFilters), appliedFilters);
-  }, [
-    activeTab,
-    savedVideos,
-    results,
-    hiddenVideoIds,
-    appliedFilters,
-  ]);
+    return sortVideos(filterBreakdown?.finalVideos || [], appliedFilters);
+  }, [activeTab, savedVideos, filterBreakdown, appliedFilters]);
+
+  const hiddenSubscriberVideos = useMemo(() => {
+    if (activeTab === 'archive') return [];
+    return sortVideos(filterBreakdown?.hiddenSubscriberVideos || [], appliedFilters);
+  }, [activeTab, filterBreakdown, appliedFilters]);
 
   const summary = useMemo(() => {
     const top = visibleVideos[0];
@@ -312,9 +383,9 @@ const KeywordSearch = ({ activeTab }) => {
       risingScore: video.metrics.risingScore,
       title: video.snippet.title,
       channelTitle: video.snippet.channelTitle,
-      subscriberCount: video.metrics.subscribers,
+      subscriberCount: video.metrics.hasHiddenSubscribers ? '미공개' : video.metrics.subscribers,
       viewCount: video.metrics.views,
-      viewSubscriberRatio: video.metrics.viewSubscriberRatio.toFixed(1),
+      viewSubscriberRatio: video.metrics.hasHiddenSubscribers ? '미공개' : video.metrics.viewSubscriberRatio.toFixed(1),
       hourlyViews: video.metrics.hourlyViews,
       commentCount: video.metrics.comments,
       duration: video.metrics.durationMinutes,
@@ -335,10 +406,14 @@ const KeywordSearch = ({ activeTab }) => {
         onFilterChange={handleFilterChange}
         onPresetSelect={handlePresetSelect}
         activeTab={activeTab}
+        onRunSearch={runSearch}
+        loading={loading}
+        progress={progress}
         onApplyFilters={applyCurrentFilters}
         hasResults={results.length > 0}
         rawResultCount={results.length}
         appliedFilters={appliedFilters}
+        estimatedSearchCalls={estimatedSearchCalls}
       />
 
       <section className="min-w-0 space-y-5">
@@ -362,7 +437,7 @@ const KeywordSearch = ({ activeTab }) => {
                   type="button"
                   onClick={runSearch}
                   disabled={loading}
-                  className="rounded-md bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:bg-slate-300"
+                  className="rounded-md bg-blue-50 px-5 py-2.5 text-sm font-bold text-blue-700 shadow-sm ring-1 ring-blue-100 transition hover:bg-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
                 >
                   {loading ? progress || '검색 중' : '후보 찾기'}
                 </button>
@@ -394,6 +469,50 @@ const KeywordSearch = ({ activeTab }) => {
           </div>
         )}
 
+        {!isArchive && results.length > 0 && filterBreakdown && (
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-slate-950">필터 통과 현황</p>
+                <p className="text-xs text-slate-500">검색 결과가 어느 조건에서 줄어드는지 확인합니다.</p>
+              </div>
+              {hiddenSubscriberVideos.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowHiddenSubscriberVideos((prev) => !prev)}
+                  className="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-200"
+                >
+                  구독자 미공개 {hiddenSubscriberVideos.length.toLocaleString('ko-KR')}개{' '}
+                  {showHiddenSubscriberVideos ? '접기' : '보기'}
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
+              {[
+                ['수집 원본', rawSearchCount || filterBreakdown.raw],
+                ['중복 제거 후', filterBreakdown.raw],
+                ['길이 통과', filterBreakdown.afterLength],
+                ['조회수 통과', filterBreakdown.afterViews],
+                ['1만 이하', filterBreakdown.strong],
+                ['최종 후보', filterBreakdown.final],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-md bg-slate-50 px-3 py-2">
+                  <p className="text-[11px] font-bold text-slate-500">{label}</p>
+                  <p className="mt-1 text-lg font-black text-slate-950">
+                    {Number(value).toLocaleString('ko-KR')}
+                  </p>
+                </div>
+              ))}
+            </div>
+            {filterBreakdown.hiddenSubscribers > 0 && (
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                구독자 미공개 채널 {filterBreakdown.hiddenSubscribers.toLocaleString('ko-KR')}개는 1만 이하 여부를
+                판단할 수 없어 별도 참고 후보로 분리했습니다.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-bold text-slate-500">결과</p>
@@ -421,7 +540,30 @@ const KeywordSearch = ({ activeTab }) => {
           onHide={hideVideo}
           savedVideoIds={savedVideoIds}
           hiddenVideoIds={hiddenVideoIds}
+          emptyMessage={
+            isArchive
+              ? '저장된 영상이 없습니다.'
+              : loading
+                ? progress || '검색 중입니다. 키워드별 후보 영상을 수집하고 있습니다.'
+                : hasSearched
+                  ? '검색은 되었지만 현재 필터를 통과한 영상이 없습니다. 기간, 조회수, 길이, 구독자 조건을 완화해보세요.'
+                  : '소재 카테고리와 검색 조건을 확인한 뒤 후보 찾기를 눌러 작은 채널 롱폼 사례를 수집해보세요.'
+          }
         />
+
+        {!isArchive && showHiddenSubscriberVideos && hiddenSubscriberVideos.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-black text-slate-950">구독자 미공개 참고 후보</h3>
+            <VideoTable
+              videos={hiddenSubscriberVideos}
+              onSave={saveVideo}
+              onHide={hideVideo}
+              savedVideoIds={savedVideoIds}
+              hiddenVideoIds={hiddenVideoIds}
+              emptyMessage="구독자 미공개 참고 후보가 없습니다."
+            />
+          </div>
+        )}
       </section>
     </div>
   );

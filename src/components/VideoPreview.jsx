@@ -22,9 +22,9 @@ const VideoPreview = ({ video }) => {
           <h2 className="mt-1 line-clamp-2 text-lg font-black text-slate-950">{video.snippet.title}</h2>
           <p className="mt-2 text-sm text-slate-600">{video.snippet.channelTitle}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-            <span className="rounded bg-rose-50 px-2 py-1 text-rose-700">떡상지수 {video.metrics?.risingScore}</span>
+            <span className="rounded bg-rose-50 px-2 py-1 text-rose-700">기회점수 {video.metrics?.risingScore}</span>
             <span className="rounded bg-slate-100 px-2 py-1 text-slate-700">
-              조회/구독 {video.metrics?.viewSubscriberRatio.toFixed(1)}배
+              조회/구독 {video.metrics?.hasHiddenSubscribers ? '미공개' : `${video.metrics?.viewSubscriberRatio.toFixed(1)}배`}
             </span>
             <span className="rounded bg-slate-100 px-2 py-1 text-slate-700">
               시간당 {video.metrics?.hourlyViews.toLocaleString('ko-KR')}
