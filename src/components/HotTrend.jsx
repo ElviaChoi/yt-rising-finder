@@ -63,7 +63,7 @@ const HotTrend = () => {
           const maxPages = Math.ceil(50 / 50); // 키워드당 최대 50개
 
           do {
-            const searchResponse = await searchVideos({
+            const searchResult = await searchVideos({
               keyword: keyword,
               regionCode: filters.countryCode || undefined,
               maxResults: 50,
@@ -71,13 +71,15 @@ const HotTrend = () => {
               pageToken: nextPageToken,
               ...dateRange
             });
+            const searchResponse = searchResult.data;
 
             if (!searchResponse.items || searchResponse.items.length === 0) {
               break;
             }
 
             const videoIds = searchResponse.items.map(item => item.id.videoId);
-            const videoDetails = await getVideoDetails(videoIds);
+            const videoDetailsResult = await getVideoDetails(videoIds);
+            const videoDetails = videoDetailsResult.data;
 
             // 필터 적용
             const filteredVideos = videoDetails.filter(video => {
@@ -88,7 +90,8 @@ const HotTrend = () => {
 
             // 채널 정보 조회
             const channelIds = [...new Set(filteredVideos.map(v => v.snippet.channelId))];
-            const channelInfo = await getChannelInfo(channelIds);
+            const channelInfoResult = await getChannelInfo(channelIds);
+            const channelInfo = channelInfoResult.data;
             const channelMap = {};
             channelInfo.forEach(ch => {
               channelMap[ch.id] = parseInt(ch.statistics?.subscriberCount || 0);
@@ -408,4 +411,3 @@ const HotTrend = () => {
 };
 
 export default HotTrend;
-

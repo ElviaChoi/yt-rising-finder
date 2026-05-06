@@ -44,6 +44,23 @@ const formatViews = (value) =>
 const formatSubscribers = (value) =>
   value === '999999999' ? '제한 없음' : `${Number(value || 0).toLocaleString('ko-KR')}명 이하`;
 
+const selectClassName =
+  'w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-2 pr-10 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
+
+const wideSelectClassName =
+  'w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-2 pr-10 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
+
+const SelectBox = ({ value, onChange, className = selectClassName, children }) => (
+  <div className="relative">
+    <select value={value} onChange={onChange} className={className}>
+      {children}
+    </select>
+    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-black text-slate-900">
+      v
+    </span>
+  </div>
+);
+
 const SearchFilters = ({
   filters,
   onFilterChange,
@@ -57,6 +74,8 @@ const SearchFilters = ({
   rawResultCount = 0,
   appliedFilters,
   estimatedSearchCalls = 0,
+  cacheStats,
+  onClearCache,
 }) => {
   const selectedExpansion = expansionPresets.find((preset) => preset.id === filters.expansionId);
   const applied = appliedFilters || filters;
@@ -118,64 +137,60 @@ const SearchFilters = ({
 
           <label className="block">
             <FieldLabel icon="+">검색 확장</FieldLabel>
-            <select
+            <SelectBox
               value={filters.expansionId}
               onChange={(event) => onFilterChange('expansionId', event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
               {expansionPresets.map((preset) => (
                 <option key={preset.id} value={preset.id}>
                   {preset.label}
                 </option>
               ))}
-            </select>
+            </SelectBox>
             <p className="mt-1 text-xs text-slate-500">{selectedExpansion?.hint}</p>
           </label>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <FieldLabel icon="D">기간</FieldLabel>
-              <select
+              <SelectBox
                 value={filters.duration}
                 onChange={(event) => onFilterChange('duration', event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 <option value="7">7일</option>
                 <option value="30">30일</option>
                 <option value="90">90일</option>
                 <option value="180">180일</option>
                 <option value="365">1년</option>
-              </select>
+              </SelectBox>
             </label>
 
             <label className="block">
               <FieldLabel icon="G">국가</FieldLabel>
-              <select
+              <SelectBox
                 value={filters.countryCode}
                 onChange={(event) => onFilterChange('countryCode', event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 {countryOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             </label>
           </div>
 
           <label className="block">
             <FieldLabel icon="#">검색량</FieldLabel>
-            <select
+            <SelectBox
               value={filters.maxKeywords}
               onChange={(event) => onFilterChange('maxKeywords', event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
               <option value="5">가볍게</option>
               <option value="8">보통</option>
               <option value="12">넓게</option>
               <option value="16">아주 넓게</option>
-            </select>
+            </SelectBox>
             <p className="mt-1 text-xs text-slate-500">
               예상 검색 호출 {estimatedSearchCalls.toLocaleString('ko-KR')}회, 약{' '}
               {(estimatedSearchCalls * 100).toLocaleString('ko-KR')} quota
@@ -197,6 +212,27 @@ const SearchFilters = ({
             결과 필터
           </div>
 
+          <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-600">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="font-bold text-slate-700">API/캐시</span>
+              <button
+                type="button"
+                onClick={onClearCache}
+                className="rounded bg-slate-100 px-2 py-1 font-bold text-slate-600 transition hover:bg-slate-200"
+              >
+                캐시 비우기
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+              <span>새 API 호출</span>
+              <span className="text-right font-bold">{(cacheStats?.apiCalls || 0).toLocaleString('ko-KR')}회</span>
+              <span>캐시 적중</span>
+              <span className="text-right font-bold">{(cacheStats?.hits || 0).toLocaleString('ko-KR')}회</span>
+              <span>소비 quota</span>
+              <span className="text-right font-bold">{(cacheStats?.quota || 0).toLocaleString('ko-KR')}</span>
+            </div>
+          </div>
+
           {hasResults && (
             <div className="rounded-md bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-800">
               검색 원본 {rawResultCount.toLocaleString('ko-KR')}개 중 현재 적용 기준: 조회수 {formatViews(applied.minViews)}, 구독자 {formatSubscribers(applied.subscriberLimit)}, 길이 {lengthLabels[applied.length]}
@@ -206,42 +242,39 @@ const SearchFilters = ({
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <FieldLabel icon="V">최소 조회수</FieldLabel>
-              <select
+              <SelectBox
                 value={filters.minViews}
                 onChange={(event) => onFilterChange('minViews', event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 {numberOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             </label>
 
             <label className="block">
               <FieldLabel icon="S">구독자 상한</FieldLabel>
-              <select
+              <SelectBox
                 value={filters.subscriberLimit}
                 onChange={(event) => onFilterChange('subscriberLimit', event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 <option value="10000">1만 이하</option>
                 <option value="30000">3만 이하</option>
                 <option value="50000">5만 이하</option>
                 <option value="100000">10만 이하</option>
                 <option value="999999999">제한 없음</option>
-              </select>
+              </SelectBox>
             </label>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <FieldLabel icon="L">영상 길이</FieldLabel>
-              <select
+              <SelectBox
                 value={filters.length}
                 onChange={(event) => onFilterChange('length', event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
               <option value="all">전체</option>
               <option value="shortsOut">쇼츠 제외(3분 미만)</option>
@@ -251,22 +284,22 @@ const SearchFilters = ({
                 <option value="30plus">30분 이상</option>
                 <option value="40plus">40분 이상</option>
                 <option value="60plus">60분 이상</option>
-              </select>
+              </SelectBox>
             </label>
 
             <label className="block">
               <FieldLabel icon="R">정렬</FieldLabel>
-              <select
+              <SelectBox
                 value={filters.sortBy}
                 onChange={(event) => onFilterChange('sortBy', event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className={wideSelectClassName}
               >
-                <option value="risingScore">기회점수 높은 순</option>
+                <option value="risingScore">작은 채널 반응순</option>
                 <option value="viewSubscriberRatio">조회수/구독자 높은 순</option>
                 <option value="hourlyViews">시간당 조회수 높은 순</option>
                 <option value="views">조회수 높은 순</option>
                 <option value="publishedAt">최신순</option>
-              </select>
+              </SelectBox>
             </label>
           </div>
 

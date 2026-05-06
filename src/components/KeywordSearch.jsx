@@ -4,6 +4,7 @@ import { getChannelInfo, getVideoDetails, searchVideos } from '../services/youtu
 import { getDateRange } from '../utils/dateCalculator';
 import { exportToCSV } from '../utils/csvExporter';
 import { enrichVideo } from '../utils/videoMetrics';
+import { clearApiCache } from '../utils/apiCache';
 import SearchFilters from './SearchFilters';
 import VideoPreview from './VideoPreview';
 import VideoTable from './VideoTable';
@@ -85,6 +86,20 @@ const readStoredArray = (key) => {
   }
 };
 
+const emptyCacheStats = {
+  hits: 0,
+  misses: 0,
+  apiCalls: 0,
+  quota: 0,
+};
+
+const mergeCacheStats = (stats, cache) => ({
+  hits: stats.hits + (cache?.hit || 0),
+  misses: stats.misses + (cache?.miss || 0),
+  apiCalls: stats.apiCalls + (cache?.apiCalls || 0),
+  quota: stats.quota + (cache?.quota || 0),
+});
+
 const initialPreset = topicPresets[0];
 
 const KeywordSearch = ({ activeTab }) => {
@@ -105,6 +120,7 @@ const KeywordSearch = ({ activeTab }) => {
   const [hasSearched, setHasSearched] = useState(false);
   const [rawSearchCount, setRawSearchCount] = useState(0);
   const [showHiddenSubscriberVideos, setShowHiddenSubscriberVideos] = useState(false);
+  const [cacheStats, setCacheStats] = useState(emptyCacheStats);
 
   const activeProfile = tabProfiles[activeTab] || tabProfiles.rising;
 
@@ -246,11 +262,13 @@ const KeywordSearch = ({ activeTab }) => {
     setProgress('검색 준비 중');
     setResults([]);
     setRawSearchCount(0);
+    setCacheStats(emptyCacheStats);
     setShowHiddenSubscriberVideos(false);
 
     try {
       const dateRange = getDateRange(filters.duration);
       const collected = [];
+      let nextCacheStats = { ...emptyCacheStats };
       const searchDurations = activeProfile.searchDurations || [undefined];
 
       for (let index = 0; index < queries.length; index += 1) {
@@ -260,7 +278,7 @@ const KeywordSearch = ({ activeTab }) => {
           const durationLabel = videoDuration ? `/${videoDuration}` : '';
           setProgress(`${index + 1}/${queries.length}${durationLabel} - "${query}" 검색 중`);
 
-          const searchResponse = await searchVideos({
+          const searchResult = await searchVideos({
             keyword: query,
             regionCode: filters.countryCode,
             relevanceLanguage: activeProfile.relevanceLanguage,
@@ -269,13 +287,19 @@ const KeywordSearch = ({ activeTab }) => {
             videoDuration,
             ...dateRange,
           });
+          nextCacheStats = mergeCacheStats(nextCacheStats, searchResult.cache);
+          const searchResponse = searchResult.data;
 
           const videoIds = (searchResponse.items || []).map((item) => item.id.videoId).filter(Boolean);
           if (videoIds.length === 0) continue;
 
-          const details = await getVideoDetails(videoIds);
+          const detailsResult = await getVideoDetails(videoIds);
+          nextCacheStats = mergeCacheStats(nextCacheStats, detailsResult.cache);
+          const details = detailsResult.data;
           const channelIds = [...new Set(details.map((video) => video.snippet.channelId))];
-          const channels = await getChannelInfo(channelIds);
+          const channelsResult = await getChannelInfo(channelIds);
+          nextCacheStats = mergeCacheStats(nextCacheStats, channelsResult.cache);
+          const channels = channelsResult.data;
           const channelMap = Object.fromEntries(
             channels.map((channel) => [
               channel.id,
@@ -311,6 +335,7 @@ const KeywordSearch = ({ activeTab }) => {
       setResults(uniqueVideos);
       setAppliedFilters(filters);
       setRawSearchCount(collected.length);
+      setCacheStats(nextCacheStats);
       setProgress('');
     } catch (searchError) {
       console.error(searchError);
@@ -345,6 +370,11 @@ const KeywordSearch = ({ activeTab }) => {
   const restoreHiddenVideos = () => {
     setHiddenVideoIds([]);
     localStorage.setItem(STORAGE_KEYS.hidden, JSON.stringify([]));
+  };
+
+  const handleClearCache = async () => {
+    await clearApiCache();
+    setCacheStats(emptyCacheStats);
   };
 
   const filterBreakdown = useMemo(() => {
@@ -414,6 +444,8 @@ const KeywordSearch = ({ activeTab }) => {
         rawResultCount={results.length}
         appliedFilters={appliedFilters}
         estimatedSearchCalls={estimatedSearchCalls}
+        cacheStats={cacheStats}
+        onClearCache={handleClearCache}
       />
 
       <section className="min-w-0 space-y-5">

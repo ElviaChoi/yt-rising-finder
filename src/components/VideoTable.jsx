@@ -21,7 +21,7 @@ const VideoTable = ({ videos, onSave, onHide, savedVideoIds = [], hiddenVideoIds
               <th className="px-3 py-3 text-left text-xs font-semibold">썸네일</th>
               <th className="px-3 py-3 text-left text-xs font-semibold">제목</th>
               <th className="px-3 py-3 text-left text-xs font-semibold">채널</th>
-              <th className="px-3 py-3 text-right text-xs font-semibold">기회점수</th>
+              <th className="px-3 py-3 text-right text-xs font-semibold">반응점수</th>
               <th className="px-3 py-3 text-right text-xs font-semibold">구독자</th>
               <th className="px-3 py-3 text-right text-xs font-semibold">조회수</th>
               <th className="px-3 py-3 text-right text-xs font-semibold">조회/구독</th>
