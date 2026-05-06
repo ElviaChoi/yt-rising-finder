@@ -3,7 +3,39 @@ import { getVideoMetrics } from '../utils/videoMetrics';
 
 const formatNumber = (value) => Number(value || 0).toLocaleString('ko-KR');
 
-const VideoTable = ({ videos, onSave, onHide, savedVideoIds = [], hiddenVideoIds = [], emptyMessage }) => {
+const getCandidateSummary = (metrics) => {
+  const parts = [];
+
+  if (metrics.hasHiddenSubscribers) {
+    parts.push('구독자 미공개');
+  } else {
+    parts.push(`조회/구독 ${metrics.viewSubscriberRatio.toFixed(1)}배`);
+  }
+
+  parts.push(`시간당 ${formatNumber(metrics.hourlyViews)}회`);
+  parts.push(`${metrics.daysSinceUpload}일 전`);
+
+  if (metrics.durationMinutes >= 12 && metrics.durationMinutes <= 40) {
+    parts.push('12~40분 롱폼');
+  }
+
+  if (metrics.commentRate >= 0.002) {
+    parts.push('댓글 반응 높음');
+  }
+
+  return parts.join(' · ');
+};
+
+const VideoTable = ({
+  videos,
+  onSave,
+  onHide,
+  onToggleReviewed,
+  savedVideoIds = [],
+  hiddenVideoIds = [],
+  reviewedVideoIds = [],
+  emptyMessage,
+}) => {
   if (!videos || videos.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 bg-white px-6 py-16 text-center text-slate-500">
@@ -15,7 +47,7 @@ const VideoTable = ({ videos, onSave, onHide, savedVideoIds = [], hiddenVideoIds
   return (
     <div className="w-full max-w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="w-full max-w-full overflow-x-auto">
-        <table className="min-w-[1180px] divide-y divide-slate-200">
+        <table className="min-w-[1240px] divide-y divide-slate-200">
           <thead className="bg-slate-950 text-white">
             <tr>
               <th className="px-3 py-3 text-left text-xs font-semibold">썸네일</th>
@@ -41,6 +73,7 @@ const VideoTable = ({ videos, onSave, onHide, savedVideoIds = [], hiddenVideoIds
                 video.snippet.thumbnails?.default;
               const isSaved = savedVideoIds.includes(video.videoId);
               const isHidden = hiddenVideoIds.includes(video.videoId);
+              const isReviewed = reviewedVideoIds.includes(video.videoId);
 
               return (
                 <tr key={video.videoId} className={isHidden ? 'bg-slate-100 opacity-60' : 'hover:bg-blue-50/50'}>
@@ -85,7 +118,13 @@ const VideoTable = ({ videos, onSave, onHide, savedVideoIds = [], hiddenVideoIds
                           90일 이내
                         </span>
                       )}
+                      {isReviewed && (
+                        <span className="rounded bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">
+                          확인함
+                        </span>
+                      )}
                     </div>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">{getCandidateSummary(metrics)}</p>
                   </td>
                   <td className="max-w-[150px] px-3 py-3 align-top text-sm text-slate-700">
                     <a
@@ -97,7 +136,10 @@ const VideoTable = ({ videos, onSave, onHide, savedVideoIds = [], hiddenVideoIds
                       {video.snippet.channelTitle}
                     </a>
                   </td>
-                  <td className="px-3 py-3 text-right align-top text-sm font-black text-rose-600">
+                  <td
+                    className="px-3 py-3 text-right align-top text-sm font-black text-rose-600"
+                    title="반응점수는 시간당 조회수, 조회수/구독자 비율, 댓글률, 최근성, 영상 길이, 작은 채널 보너스를 합산합니다."
+                  >
                     {metrics.risingScore}
                   </td>
                   <td className="px-3 py-3 text-right align-top text-sm">
@@ -117,7 +159,20 @@ const VideoTable = ({ videos, onSave, onHide, savedVideoIds = [], hiddenVideoIds
                     <div className="text-xs text-slate-400">{metrics.daysSinceUpload}일 전</div>
                   </td>
                   <td className="px-3 py-3 align-top">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      {onToggleReviewed && (
+                        <button
+                          type="button"
+                          onClick={() => onToggleReviewed(video)}
+                          className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+                            isReviewed
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-slate-950 text-white hover:bg-slate-800'
+                          }`}
+                        >
+                          {isReviewed ? '확인함' : '확인'}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => onSave(video)}

@@ -1,22 +1,10 @@
-import { openDB } from 'idb';
-
-const DB_NAME = 'yt-rising-finder';
-const DB_VERSION = 1;
-const CACHE_STORE = 'apiCache';
+import { CACHE_STORE, dbPromise } from './appDb';
 
 export const CACHE_TTL = {
   search: 72 * 60 * 60 * 1000,
   videos: 24 * 60 * 60 * 1000,
   channels: 7 * 24 * 60 * 60 * 1000,
 };
-
-const dbPromise = openDB(DB_NAME, DB_VERSION, {
-  upgrade(db) {
-    if (!db.objectStoreNames.contains(CACHE_STORE)) {
-      db.createObjectStore(CACHE_STORE);
-    }
-  },
-});
 
 const normalizeValue = (value) => {
   if (Array.isArray(value)) return value.map(normalizeValue);

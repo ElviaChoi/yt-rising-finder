@@ -5,6 +5,7 @@ import { getDateRange } from '../utils/dateCalculator';
 import { exportToCSV } from '../utils/csvExporter';
 import { enrichVideo } from '../utils/videoMetrics';
 import { clearApiCache } from '../utils/apiCache';
+import { deleteUsageLog, getReviewedVideoIds, upsertUsageLog } from '../utils/usageLog';
 import SearchFilters from './SearchFilters';
 import VideoPreview from './VideoPreview';
 import VideoTable from './VideoTable';
@@ -121,6 +122,7 @@ const KeywordSearch = ({ activeTab }) => {
   const [rawSearchCount, setRawSearchCount] = useState(0);
   const [showHiddenSubscriberVideos, setShowHiddenSubscriberVideos] = useState(false);
   const [cacheStats, setCacheStats] = useState(emptyCacheStats);
+  const [reviewedVideoIds, setReviewedVideoIds] = useState([]);
 
   const activeProfile = tabProfiles[activeTab] || tabProfiles.rising;
 
@@ -135,6 +137,12 @@ const KeywordSearch = ({ activeTab }) => {
       return nextFilters;
     });
   }, [activeTab]);
+
+  useEffect(() => {
+    getReviewedVideoIds()
+      .then(setReviewedVideoIds)
+      .catch((logError) => console.error('확인 로그를 불러오지 못했습니다.', logError));
+  }, []);
 
   const selectedPreset = useMemo(
     () => topicPresets.find((preset) => preset.id === filters.presetId) || initialPreset,
@@ -377,6 +385,36 @@ const KeywordSearch = ({ activeTab }) => {
     setCacheStats(emptyCacheStats);
   };
 
+  const toggleReviewedVideo = async (video) => {
+    const isReviewed = reviewedVideoIds.includes(video.videoId);
+
+    if (isReviewed) {
+      await deleteUsageLog(video.videoId);
+      setReviewedVideoIds((prev) => prev.filter((id) => id !== video.videoId));
+      return;
+    }
+
+    await upsertUsageLog({
+      videoId: video.videoId,
+      channelId: video.snippet.channelId,
+      title: video.snippet.title,
+      channelTitle: video.snippet.channelTitle,
+      activeTab,
+      categoryId: appliedFilters.presetId,
+      searchedKeyword: video.searchedKeyword,
+      score: video.metrics.risingScore,
+      views: video.metrics.views,
+      subscribers: video.metrics.subscribers,
+      hasHiddenSubscribers: video.metrics.hasHiddenSubscribers,
+      viewSubscriberRatio: video.metrics.viewSubscriberRatio,
+      hourlyViews: video.metrics.hourlyViews,
+      commentRate: video.metrics.commentRate,
+      daysSinceUpload: video.metrics.daysSinceUpload,
+      durationMinutes: video.metrics.durationMinutes,
+    });
+    setReviewedVideoIds((prev) => Array.from(new Set([video.videoId, ...prev])));
+  };
+
   const filterBreakdown = useMemo(() => {
     if (activeTab === 'archive') return null;
     return getFilterBreakdown(results, appliedFilters);
@@ -570,8 +608,10 @@ const KeywordSearch = ({ activeTab }) => {
           videos={visibleVideos}
           onSave={saveVideo}
           onHide={hideVideo}
+          onToggleReviewed={toggleReviewedVideo}
           savedVideoIds={savedVideoIds}
           hiddenVideoIds={hiddenVideoIds}
+          reviewedVideoIds={reviewedVideoIds}
           emptyMessage={
             isArchive
               ? '저장된 영상이 없습니다.'
@@ -590,8 +630,10 @@ const KeywordSearch = ({ activeTab }) => {
               videos={hiddenSubscriberVideos}
               onSave={saveVideo}
               onHide={hideVideo}
+              onToggleReviewed={toggleReviewedVideo}
               savedVideoIds={savedVideoIds}
               hiddenVideoIds={hiddenVideoIds}
+              reviewedVideoIds={reviewedVideoIds}
               emptyMessage="구독자 미공개 참고 후보가 없습니다."
             />
           </div>
