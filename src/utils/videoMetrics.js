@@ -72,11 +72,12 @@ export const getVideoMetrics = (video) => {
   };
 };
 
-export const enrichVideo = (video, searchedKeyword = '') => {
+export const enrichVideo = (video, searchedKeyword = '', metadata = {}) => {
   const metrics = getVideoMetrics(video);
   return {
     ...video,
     searchedKeyword,
+    ...metadata,
     metrics,
     risingScore: metrics.risingScore,
   };

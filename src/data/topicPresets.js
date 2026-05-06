@@ -17,6 +17,22 @@ export const topicPresets = [
       '상속 증여 기초',
       '노후 정부지원',
     ],
+    overseasSeeds: {
+      en: [
+        { q: 'retirement planning', note: '영어권 노후 준비 정보 포맷' },
+        { q: 'retirement income explained', note: '은퇴 후 현금흐름 설명 원형' },
+        { q: 'senior benefits explained', note: '정부 혜택 설명형 포맷' },
+        { q: 'jobs after retirement', note: '은퇴 후 일자리 소재' },
+        { q: 'living on social security', note: '연금 생활비 현실 소재' },
+      ],
+      ja: [
+        { q: '老後 資金 解説', note: '일본어권 노후자금 설명 포맷' },
+        { q: '年金 生活 解説', note: '연금 생활 정보형 소재' },
+        { q: 'シニア 仕事', note: '시니어 일자리 소재' },
+        { q: '老後 節約 生活', note: '노후 생활비 절약 포맷' },
+        { q: '介護保険 解説', note: '장기요양/보험 설명 소재' },
+      ],
+    },
   },
   {
     id: 'mind-relationship',
@@ -38,6 +54,22 @@ export const topicPresets = [
       '인생 후반',
       '노년 친구',
     ],
+    overseasSeeds: {
+      en: [
+        { q: 'relationships after 60', note: '노년 인간관계 생활심리 포맷' },
+        { q: 'loneliness in old age', note: '노후 외로움 공감형 소재' },
+        { q: 'setting boundaries with adult children', note: '성인 자녀와 거리두기 소재' },
+        { q: 'life advice for older adults', note: '중장년 삶의 조언 포맷' },
+        { q: 'aging with dignity', note: '품위 있는 노후 태도 소재' },
+      ],
+      ja: [
+        { q: '老後 人間関係', note: '노후 인간관계 포맷' },
+        { q: '親子関係 距離感', note: '자녀와 거리두기 생활심리 소재' },
+        { q: '老後 孤独 解説', note: '노후 외로움 설명형 소재' },
+        { q: '品よく 老いる', note: '품위 있게 늙는 법 포맷' },
+        { q: '人生 後半 生き方', note: '인생 후반 삶의 태도 소재' },
+      ],
+    },
   },
   {
     id: 'health-habits',
@@ -57,6 +89,22 @@ export const topicPresets = [
       '노년 식습관',
       '생활 운동',
     ],
+    overseasSeeds: {
+      en: [
+        { q: 'healthy habits after 60', note: '60대 이후 건강 습관 포맷' },
+        { q: 'walking benefits for seniors', note: '걷기 운동 설명 소재' },
+        { q: 'strength training for seniors', note: '노년 근력 운동 포맷' },
+        { q: 'blood pressure lifestyle changes', note: '생활 습관 중심 혈압 관리' },
+        { q: 'prevent dementia habits', note: '치매 예방 습관형 소재' },
+      ],
+      ja: [
+        { q: '60代 健康習慣', note: '60대 건강 습관 포맷' },
+        { q: '高齢者 筋トレ', note: '노년 근력 운동 소재' },
+        { q: '認知症 予防 習慣', note: '치매 예방 습관형 소재' },
+        { q: '血圧 生活習慣', note: '생활 습관 중심 혈압 관리' },
+        { q: 'ウォーキング 効果 高齢者', note: '걷기 운동 효과 소재' },
+      ],
+    },
   },
   {
     id: 'philosophy-wisdom',
@@ -76,6 +124,22 @@ export const topicPresets = [
       '집착 내려놓기',
       '말년에 후회하지 않는 삶',
     ],
+    overseasSeeds: {
+      en: [
+        { q: 'stoicism for life', note: '스토아 철학 생활 적용 포맷' },
+        { q: 'philosophy for aging', note: '나이듦과 철학 연결 소재' },
+        { q: 'schopenhauer life advice', note: '쇼펜하우어 인생 조언 포맷' },
+        { q: 'buddhist wisdom for life', note: '불교 철학 생활 지혜 소재' },
+        { q: 'wisdom for later life', note: '인생 후반 삶의 지혜 포맷' },
+      ],
+      ja: [
+        { q: 'ストア哲学 生き方', note: '스토아 철학 생활 적용 포맷' },
+        { q: 'ショーペンハウアー 人生', note: '쇼펜하우어 인생 조언 소재' },
+        { q: '仏教 人生の知恵', note: '불교 철학 삶의 지혜 소재' },
+        { q: '老後 生き方 哲学', note: '노후 삶의 태도와 철학 포맷' },
+        { q: '論語 人生の知恵', note: '논어/고전 지혜 포맷' },
+      ],
+    },
   },
   {
     id: 'world-geo-economy',
@@ -95,6 +159,22 @@ export const topicPresets = [
       '해상 무역로',
       '자원 전쟁',
     ],
+    overseasSeeds: {
+      en: [
+        { q: 'geopolitics explained', note: '지도 기반 해외 교양 포맷' },
+        { q: 'why geography matters', note: '지리와 경제 연결 원형' },
+        { q: 'global trade explained', note: '무역과 물가 연결 소재' },
+        { q: 'why countries are rich', note: '나라별 경제 설명 포맷' },
+        { q: 'resources geopolitics explained', note: '자원과 국제정세 연결 소재' },
+      ],
+      ja: [
+        { q: '地政学 解説', note: '일본어권 지정학 해설 포맷' },
+        { q: '世界経済 解説', note: '세계경제 설명형 소재' },
+        { q: '地図で見る 世界史', note: '지도 기반 세계사/경제 포맷' },
+        { q: '資源 戦争 解説', note: '자원 전쟁 설명 소재' },
+        { q: '国が豊かになる理由', note: '나라가 부자가 되는 이유 포맷' },
+      ],
+    },
   },
   {
     id: 'modern-life-history',
@@ -114,6 +194,22 @@ export const topicPresets = [
       '한국 근현대사',
       '그때 그 시절',
     ],
+    overseasSeeds: {
+      en: [
+        { q: '1960s American life', note: '근현대 생활사 원형' },
+        { q: '1970s daily life', note: '1970년대 일상 회고 포맷' },
+        { q: 'life before smartphones', note: '기술 변화 전후 생활 비교 소재' },
+        { q: 'old household items', note: '옛 물건 회고형 소재' },
+        { q: 'how people lived in the 1980s', note: '1980년대 생활 설명 포맷' },
+      ],
+      ja: [
+        { q: '昭和の暮らし', note: '쇼와 시대 일상, 한국 1960~80년대와 매핑' },
+        { q: '昭和 レトロ 生活', note: '쇼와 레트로 생활사 포맷' },
+        { q: '昔の道具 解説', note: '옛 물건 설명 소재' },
+        { q: '昭和 家電 歴史', note: '옛 가전/생활 변화 소재' },
+        { q: '1980年代 暮らし', note: '1980년대 생활 회고 포맷' },
+      ],
+    },
   },
   {
     id: 'history-experiment',
@@ -133,6 +229,22 @@ export const topicPresets = [
       '조선 노비 생활',
       '조선 양반 생활',
     ],
+    overseasSeeds: {
+      en: [
+        { q: 'daily life in ancient history', note: '고대/전근대 일상 설명 원형' },
+        { q: 'medieval daily life', note: '중세 생활사 포맷' },
+        { q: 'history of everyday objects', note: '옛 물건 역사 설명 소재' },
+        { q: 'royal court life history', note: '궁궐/왕실 생활 원형' },
+        { q: 'peasants daily life history', note: '백성/서민 생활사 포맷' },
+      ],
+      ja: [
+        { q: '江戸時代 暮らし', note: '에도 시대 생활사, 조선 생활사와 비교 참고' },
+        { q: '昔の暮らし 解説', note: '옛 생활 설명형 포맷' },
+        { q: '江戸時代 庶民 生活', note: '서민 생활사 포맷' },
+        { q: '日本史 日常生活', note: '일상생활 중심 역사 포맷' },
+        { q: '昔の道具 歴史', note: '옛 물건 역사 설명 소재' },
+      ],
+    },
   },
 ];
 

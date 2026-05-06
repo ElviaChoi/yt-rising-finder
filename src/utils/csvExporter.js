@@ -5,7 +5,7 @@ export const exportToCSV = (data, filename = 'youtube_results.csv') => {
   }
 
   const headers = [
-    '떡상지수',
+    '반응점수',
     '제목',
     '채널명',
     '구독자수',
@@ -16,6 +16,7 @@ export const exportToCSV = (data, filename = 'youtube_results.csv') => {
     '길이(분)',
     '업로드일',
     '검색키워드',
+    '검색메모',
     'URL',
   ];
 
@@ -36,6 +37,7 @@ export const exportToCSV = (data, filename = 'youtube_results.csv') => {
         item.duration || 0,
         item.publishedAt || '',
         escapeCell(item.searchedKeyword),
+        escapeCell(item.searchedKeywordNote),
         `https://www.youtube.com/watch?v=${item.videoId || ''}`,
       ].join(',')
     ),

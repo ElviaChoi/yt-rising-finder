@@ -103,6 +103,11 @@ const VideoTable = ({
                           {video.searchedKeyword}
                         </span>
                       )}
+                      {video.searchedLanguageLabel && (
+                        <span className="rounded bg-indigo-50 px-2 py-1 text-xs font-bold text-indigo-700">
+                          {video.searchedLanguageLabel}
+                        </span>
+                      )}
                       {metrics.hasHiddenSubscribers && (
                         <span className="rounded bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
                           구독자 미공개
@@ -124,6 +129,11 @@ const VideoTable = ({
                         </span>
                       )}
                     </div>
+                    {video.searchedKeywordNote && (
+                      <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs leading-5 text-amber-800">
+                        원형 메모: {video.searchedKeywordNote}
+                      </p>
+                    )}
                     <p className="mt-2 text-xs leading-5 text-slate-500">{getCandidateSummary(metrics)}</p>
                   </td>
                   <td className="max-w-[150px] px-3 py-3 align-top text-sm text-slate-700">

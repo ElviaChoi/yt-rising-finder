@@ -24,6 +24,7 @@ const lengthLabels = {
   '8plus': '8분 이상',
   '12plus': '12분 이상',
   '15plus': '15분 이상',
+  '20plus': '20분 이상(long)',
   '30plus': '30분 이상',
   '40plus': '40분 이상',
   '60plus': '60분 이상',
@@ -166,17 +167,33 @@ const SearchFilters = ({
             </label>
 
             <label className="block">
-              <FieldLabel icon="G">국가</FieldLabel>
-              <SelectBox
-                value={filters.countryCode}
-                onChange={(event) => onFilterChange('countryCode', event.target.value)}
-              >
-                {countryOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </SelectBox>
+              {activeTab === 'competitor' ? (
+                <>
+                  <FieldLabel icon="G">해외 언어</FieldLabel>
+                  <SelectBox
+                    value={filters.overseasLanguage || 'en'}
+                    onChange={(event) => onFilterChange('overseasLanguage', event.target.value)}
+                  >
+                    <option value="en">영어권만</option>
+                    <option value="ja">일본어만</option>
+                    <option value="both">영어+일본어</option>
+                  </SelectBox>
+                </>
+              ) : (
+                <>
+                  <FieldLabel icon="G">국가</FieldLabel>
+                  <SelectBox
+                    value={filters.countryCode}
+                    onChange={(event) => onFilterChange('countryCode', event.target.value)}
+                  >
+                    {countryOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </SelectBox>
+                </>
+              )}
             </label>
           </div>
 
@@ -281,6 +298,7 @@ const SearchFilters = ({
               <option value="8plus">8분 이상</option>
               <option value="12plus">12분 이상</option>
               <option value="15plus">15분 이상</option>
+                <option value="20plus">20분 이상(long)</option>
                 <option value="30plus">30분 이상</option>
                 <option value="40plus">40분 이상</option>
                 <option value="60plus">60분 이상</option>
@@ -318,7 +336,7 @@ const SearchFilters = ({
 
           {activeTab === 'competitor' && (
             <div className="rounded-md bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-              해외 원형 참고는 국내 후보 발굴이 아니라, 영어권/일본어권에서 반복되는 소재 구조를 확인하는 모드입니다.
+              해외 원형 참고는 영어권은 US/en, 일본어권은 JP/ja로 검색합니다. API 검색은 20분 초과(long) 영상만 수집합니다.
             </div>
           )}
         </div>

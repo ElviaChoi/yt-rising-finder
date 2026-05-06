@@ -52,15 +52,15 @@ const tabProfiles = {
     filters: {
       minViews: '10000',
       subscriberLimit: '999999999',
-      length: '12plus',
+      length: '20plus',
       sortBy: 'views',
       countryCode: 'US',
+      overseasLanguage: 'en',
       expansionId: 'none',
-      maxKeywords: '8',
+      maxKeywords: '5',
     },
     searchOrder: 'relevance',
     searchDurations: ['long'],
-    relevanceLanguage: 'en',
   },
   keyword: {
     title: '키워드 실험',
@@ -102,6 +102,20 @@ const mergeCacheStats = (stats, cache) => ({
 });
 
 const initialPreset = topicPresets[0];
+
+const overseasLanguageProfiles = {
+  en: { regionCode: 'US', relevanceLanguage: 'en', label: '영어권' },
+  ja: { regionCode: 'JP', relevanceLanguage: 'ja', label: '일본어권' },
+};
+
+const getKeywordText = (keyword) => (typeof keyword === 'string' ? keyword : keyword?.q || '');
+const getKeywordNote = (keyword) => (typeof keyword === 'string' ? '' : keyword?.note || '');
+
+const getOverseasLanguages = (value) => {
+  if (value === 'both') return ['en', 'ja'];
+  if (value === 'ja') return ['ja'];
+  return ['en'];
+};
 
 const KeywordSearch = ({ activeTab }) => {
   const initialFilters = {
@@ -159,35 +173,87 @@ const KeywordSearch = ({ activeTab }) => {
     setFilters((prev) => ({ ...prev, presetId: preset.id }));
   };
 
-  const buildSearchQueries = () => {
+  const buildSearchQueryItems = () => {
     const manualKeyword = filters.keyword.trim();
     const expansion = expansionPresets.find((preset) => preset.id === filters.expansionId);
-    const baseQueries = manualKeyword ? [manualKeyword] : selectedPreset.keywords;
     const maxKeywords = Number(filters.maxKeywords);
-    const queries = [];
+    const queryItems = [];
 
-    baseQueries.forEach((query) => {
-      if (queries.length < maxKeywords) queries.push(query);
+    if (manualKeyword) {
+      return [
+        {
+          query: manualKeyword,
+          note: '직접 입력 키워드',
+          regionCode: filters.countryCode,
+          relevanceLanguage: activeProfile.relevanceLanguage,
+        },
+      ];
+    }
+
+    if (activeTab === 'competitor') {
+      const languages = getOverseasLanguages(filters.overseasLanguage);
+
+      languages.forEach((language) => {
+        const profile = overseasLanguageProfiles[language] || overseasLanguageProfiles.en;
+        const seeds = selectedPreset.overseasSeeds?.[language] || [];
+
+        seeds.slice(0, maxKeywords).forEach((seed) => {
+          queryItems.push({
+            query: getKeywordText(seed),
+            note: getKeywordNote(seed),
+            language,
+            languageLabel: profile.label,
+            regionCode: profile.regionCode,
+            relevanceLanguage: profile.relevanceLanguage,
+          });
+        });
+      });
+
+      return queryItems.filter((item) => item.query);
+    }
+
+    const baseQueries = selectedPreset.keywords.map((keyword) => ({
+      query: getKeywordText(keyword),
+      note: getKeywordNote(keyword),
+    }));
+
+    baseQueries.forEach((item) => {
+      if (queryItems.length < maxKeywords && item.query) queryItems.push(item);
     });
 
-    if (queries.length < maxKeywords) {
+    if (queryItems.length < maxKeywords) {
       for (const baseQuery of baseQueries) {
         for (const boost of expansion?.queryBoosts || []) {
-          if (queries.length >= maxKeywords) break;
-          queries.push(`${baseQuery} ${boost}`);
+          if (queryItems.length >= maxKeywords) break;
+          queryItems.push({
+            query: `${baseQuery.query} ${boost}`,
+            note: baseQuery.note,
+          });
         }
-        if (queries.length >= maxKeywords) break;
+        if (queryItems.length >= maxKeywords) break;
       }
     }
 
-    return Array.from(new Set(queries)).slice(0, maxKeywords);
+    const unique = new Map();
+    queryItems.forEach((item) => {
+      if (!unique.has(item.query)) unique.set(item.query, item);
+    });
+
+    return Array.from(unique.values()).slice(0, maxKeywords);
   };
 
   const estimatedSearchCalls = useMemo(() => {
-    const keywordCount = buildSearchQueries().length;
+    const keywordCount = buildSearchQueryItems().length;
     const durationCount = activeProfile.searchDurations?.length || 1;
     return keywordCount * durationCount;
-  }, [filters.keyword, filters.presetId, filters.maxKeywords, filters.expansionId, activeProfile]);
+  }, [
+    filters.keyword,
+    filters.presetId,
+    filters.maxKeywords,
+    filters.expansionId,
+    filters.overseasLanguage,
+    activeProfile,
+  ]);
 
   const passesLengthFilter = (video, length) => {
     const minutes = video.metrics.durationMinutes;
@@ -195,6 +261,7 @@ const KeywordSearch = ({ activeTab }) => {
     if (length === '8plus') return minutes >= 8;
     if (length === '12plus') return minutes >= 12;
     if (length === '15plus') return minutes >= 15;
+    if (length === '20plus') return minutes >= 20;
     if (length === '30plus') return minutes >= 30;
     if (length === '40plus') return minutes >= 40;
     if (length === '60plus') return minutes >= 60;
@@ -258,7 +325,7 @@ const KeywordSearch = ({ activeTab }) => {
       return;
     }
 
-    const queries = buildSearchQueries();
+    const queries = buildSearchQueryItems();
     if (queries.length === 0) {
       setError('검색할 키워드가 없습니다.');
       return;
@@ -280,7 +347,8 @@ const KeywordSearch = ({ activeTab }) => {
       const searchDurations = activeProfile.searchDurations || [undefined];
 
       for (let index = 0; index < queries.length; index += 1) {
-        const query = queries[index];
+        const queryItem = queries[index];
+        const query = queryItem.query;
         for (let durationIndex = 0; durationIndex < searchDurations.length; durationIndex += 1) {
           const videoDuration = searchDurations[durationIndex];
           const durationLabel = videoDuration ? `/${videoDuration}` : '';
@@ -288,8 +356,8 @@ const KeywordSearch = ({ activeTab }) => {
 
           const searchResult = await searchVideos({
             keyword: query,
-            regionCode: filters.countryCode,
-            relevanceLanguage: activeProfile.relevanceLanguage,
+            regionCode: queryItem.regionCode || filters.countryCode,
+            relevanceLanguage: queryItem.relevanceLanguage || activeProfile.relevanceLanguage,
             maxResults: activeTab === 'keyword' ? 40 : 30,
             order: activeProfile.searchOrder || 'relevance',
             videoDuration,
@@ -330,7 +398,12 @@ const KeywordSearch = ({ activeTab }) => {
                   channelSubscribers: channel.subscribers || 0,
                   hiddenSubscriberCount: channel.hiddenSubscriberCount === true || channel.hiddenSubscriberCount === 'true',
                 },
-                query
+                query,
+                {
+                  searchedKeywordNote: queryItem.note,
+                  searchedLanguage: queryItem.language,
+                  searchedLanguageLabel: queryItem.languageLabel,
+                }
               )
             );
           });
@@ -402,6 +475,8 @@ const KeywordSearch = ({ activeTab }) => {
       activeTab,
       categoryId: appliedFilters.presetId,
       searchedKeyword: video.searchedKeyword,
+      searchedKeywordNote: video.searchedKeywordNote,
+      searchedLanguage: video.searchedLanguage,
       score: video.metrics.risingScore,
       views: video.metrics.views,
       subscribers: video.metrics.subscribers,
@@ -459,6 +534,7 @@ const KeywordSearch = ({ activeTab }) => {
       duration: video.metrics.durationMinutes,
       publishedAt: video.snippet.publishedAt.split('T')[0],
       searchedKeyword: video.searchedKeyword,
+      searchedKeywordNote: video.searchedKeywordNote,
       videoId: video.videoId,
     }));
 
