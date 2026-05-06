@@ -31,9 +31,11 @@ const VideoTable = ({
   onSave,
   onHide,
   onToggleReviewed,
+  onToggleTracked,
   savedVideoIds = [],
   hiddenVideoIds = [],
   reviewedVideoIds = [],
+  trackedVideoIds = [],
   emptyMessage,
 }) => {
   if (!videos || videos.length === 0) {
@@ -71,9 +73,10 @@ const VideoTable = ({
                 video.snippet.thumbnails?.medium ||
                 video.snippet.thumbnails?.high ||
                 video.snippet.thumbnails?.default;
-              const isSaved = savedVideoIds.includes(video.videoId);
+              const isSaved = savedVideoIds.includes(video.videoId) || video.isSaved === true;
               const isHidden = hiddenVideoIds.includes(video.videoId);
-              const isReviewed = reviewedVideoIds.includes(video.videoId);
+              const isReviewed = reviewedVideoIds.includes(video.videoId) || video.isReviewed === true;
+              const isTracked = trackedVideoIds.includes(video.videoId) || video.isTracked === true;
 
               return (
                 <tr key={video.videoId} className={isHidden ? 'bg-slate-100 opacity-60' : 'hover:bg-blue-50/50'}>
@@ -128,10 +131,20 @@ const VideoTable = ({
                           확인함
                         </span>
                       )}
+                      {isTracked && (
+                        <span className="rounded bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
+                          추적 중
+                        </span>
+                      )}
                     </div>
                     {video.searchedKeywordNote && (
                       <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs leading-5 text-amber-800">
                         원형 메모: {video.searchedKeywordNote}
+                      </p>
+                    )}
+                    {video.snapshotAt && (
+                      <p className="mt-2 text-xs leading-5 text-slate-400">
+                        스냅샷: {formatDate(video.snapshotAt)}
                       </p>
                     )}
                     <p className="mt-2 text-xs leading-5 text-slate-500">{getCandidateSummary(metrics)}</p>
@@ -181,6 +194,19 @@ const VideoTable = ({
                           }`}
                         >
                           {isReviewed ? '확인함' : '확인'}
+                        </button>
+                      )}
+                      {onToggleTracked && (
+                        <button
+                          type="button"
+                          onClick={() => onToggleTracked(video)}
+                          className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+                            isTracked
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          {isTracked ? '추적 중' : '추적'}
                         </button>
                       )}
                       <button

@@ -5,7 +5,7 @@ import { getDateRange } from '../utils/dateCalculator';
 import { exportToCSV } from '../utils/csvExporter';
 import { enrichVideo } from '../utils/videoMetrics';
 import { clearApiCache } from '../utils/apiCache';
-import { deleteUsageLog, getReviewedVideoIds, upsertUsageLog } from '../utils/usageLog';
+import { createUsageSnapshot, getUsageLogs, upsertUsageLog } from '../utils/usageLog';
 import SearchFilters from './SearchFilters';
 import VideoPreview from './VideoPreview';
 import VideoTable from './VideoTable';
@@ -101,6 +101,53 @@ const mergeCacheStats = (stats, cache) => ({
   quota: stats.quota + (cache?.quota || 0),
 });
 
+const isLegacyReviewedLog = (log) => log.isReviewed == null && log.isTracked == null && log.isSaved == null;
+
+const getLogIsReviewed = (log) => log.isReviewed === true || isLegacyReviewedLog(log);
+
+const getLogIsActive = (log) => getLogIsReviewed(log) || log.isTracked === true || log.isSaved === true;
+
+const usageLogToVideo = (log) => {
+  const views = Number(log.viewCount ?? log.views ?? 0);
+  const subscribers = log.subscriberCount ?? log.subscribers ?? null;
+  const comments = Number(log.commentCount ?? log.comments ?? 0);
+  const risingScore = Number(log.score ?? log.risingScore ?? 0);
+
+  return {
+    videoId: log.videoId,
+    snapshotAt: log.snapshotAt,
+    isReviewed: getLogIsReviewed(log),
+    isTracked: log.isTracked === true,
+    isSaved: log.isSaved === true,
+    activeTab: log.activeTab,
+    categoryId: log.categoryId,
+    searchedKeyword: log.searchedKeyword,
+    searchedKeywordNote: log.searchedKeywordNote,
+    snippet: {
+      title: log.title || '',
+      channelTitle: log.channelTitle || '',
+      channelId: log.channelId || '',
+      publishedAt: log.snapshotAt || new Date().toISOString(),
+      thumbnails: {},
+    },
+    contentDetails: {
+      duration: `PT${Math.round(Math.max(Number(log.durationMinutes || 0), 0))}M`,
+    },
+    metrics: {
+      views,
+      subscribers,
+      comments,
+      hourlyViews: Number(log.hourlyViews || 0),
+      viewSubscriberRatio: Number(log.viewSubscriberRatio || 0),
+      commentRate: Number(log.commentRate || 0),
+      durationMinutes: Number(log.durationMinutes || 0),
+      daysSinceUpload: Number(log.daysSinceUpload || 0),
+      risingScore,
+      hasHiddenSubscribers: Boolean(log.hasHiddenSubscribers || subscribers == null),
+    },
+  };
+};
+
 const initialPreset = topicPresets[0];
 
 const overseasLanguageProfiles = {
@@ -136,7 +183,9 @@ const KeywordSearch = ({ activeTab }) => {
   const [rawSearchCount, setRawSearchCount] = useState(0);
   const [showHiddenSubscriberVideos, setShowHiddenSubscriberVideos] = useState(false);
   const [cacheStats, setCacheStats] = useState(emptyCacheStats);
+  const [usageLogs, setUsageLogs] = useState([]);
   const [reviewedVideoIds, setReviewedVideoIds] = useState([]);
+  const [trackedVideoIds, setTrackedVideoIds] = useState([]);
 
   const activeProfile = tabProfiles[activeTab] || tabProfiles.rising;
 
@@ -152,10 +201,15 @@ const KeywordSearch = ({ activeTab }) => {
     });
   }, [activeTab]);
 
+  const refreshUsageLogs = async () => {
+    const logs = await getUsageLogs();
+    setUsageLogs(logs);
+    setReviewedVideoIds(logs.filter(getLogIsReviewed).map((log) => log.videoId));
+    setTrackedVideoIds(logs.filter((log) => log.isTracked === true).map((log) => log.videoId));
+  };
+
   useEffect(() => {
-    getReviewedVideoIds()
-      .then(setReviewedVideoIds)
-      .catch((logError) => console.error('확인 로그를 불러오지 못했습니다.', logError));
+    refreshUsageLogs().catch((logError) => console.error('확인 로그를 불러오지 못했습니다.', logError));
   }, []);
 
   const selectedPreset = useMemo(
@@ -164,6 +218,22 @@ const KeywordSearch = ({ activeTab }) => {
   );
 
   const savedVideoIds = useMemo(() => savedVideos.map((video) => video.videoId), [savedVideos]);
+  const activeUsageLogs = useMemo(
+    () =>
+      usageLogs
+        .filter(getLogIsActive)
+        .sort((a, b) => new Date(b.updatedAt || b.snapshotAt || 0).getTime() - new Date(a.updatedAt || a.snapshotAt || 0).getTime()),
+    [usageLogs]
+  );
+  const usageLogVideoIds = useMemo(() => activeUsageLogs.map((log) => log.videoId), [activeUsageLogs]);
+  const archiveVideos = useMemo(() => {
+    const logVideos = activeUsageLogs.map(usageLogToVideo);
+    const savedOnlyVideos = savedVideos
+      .filter((video) => !usageLogVideoIds.includes(video.videoId))
+      .map((video) => ({ ...video, isSaved: true }));
+
+    return [...logVideos, ...savedOnlyVideos];
+  }, [activeUsageLogs, savedVideos, usageLogVideoIds]);
 
   const handleFilterChange = (name, value) => {
     setFilters((prev) => ({ ...prev, [name]: value }));
@@ -431,13 +501,27 @@ const KeywordSearch = ({ activeTab }) => {
     }
   };
 
-  const saveVideo = (video) => {
+  const getSnapshotContext = (video) => ({
+    activeTab: activeTab === 'archive' ? video.activeTab : activeTab,
+    categoryId: activeTab === 'archive' ? video.categoryId : appliedFilters.presetId,
+  });
+
+  const saveVideo = async (video) => {
+    const willSave = !(savedVideoIds.includes(video.videoId) || video.isSaved === true);
+
     setSavedVideos((prev) => {
-      const exists = prev.some((item) => item.videoId === video.videoId);
-      const next = exists ? prev.filter((item) => item.videoId !== video.videoId) : [video, ...prev];
+      const next = willSave
+        ? [video, ...prev.filter((item) => item.videoId !== video.videoId)]
+        : prev.filter((item) => item.videoId !== video.videoId);
       localStorage.setItem(STORAGE_KEYS.saved, JSON.stringify(next));
       return next;
     });
+
+    await upsertUsageLog({
+      ...createUsageSnapshot(video, getSnapshotContext(video)),
+      isSaved: willSave,
+    });
+    await refreshUsageLogs();
   };
 
   const hideVideo = (video) => {
@@ -461,33 +545,21 @@ const KeywordSearch = ({ activeTab }) => {
   const toggleReviewedVideo = async (video) => {
     const isReviewed = reviewedVideoIds.includes(video.videoId);
 
-    if (isReviewed) {
-      await deleteUsageLog(video.videoId);
-      setReviewedVideoIds((prev) => prev.filter((id) => id !== video.videoId));
-      return;
-    }
+    await upsertUsageLog({
+      ...createUsageSnapshot(video, getSnapshotContext(video)),
+      isReviewed: !isReviewed,
+    });
+    await refreshUsageLogs();
+  };
+
+  const toggleTrackedVideo = async (video) => {
+    const isTracked = trackedVideoIds.includes(video.videoId);
 
     await upsertUsageLog({
-      videoId: video.videoId,
-      channelId: video.snippet.channelId,
-      title: video.snippet.title,
-      channelTitle: video.snippet.channelTitle,
-      activeTab,
-      categoryId: appliedFilters.presetId,
-      searchedKeyword: video.searchedKeyword,
-      searchedKeywordNote: video.searchedKeywordNote,
-      searchedLanguage: video.searchedLanguage,
-      score: video.metrics.risingScore,
-      views: video.metrics.views,
-      subscribers: video.metrics.subscribers,
-      hasHiddenSubscribers: video.metrics.hasHiddenSubscribers,
-      viewSubscriberRatio: video.metrics.viewSubscriberRatio,
-      hourlyViews: video.metrics.hourlyViews,
-      commentRate: video.metrics.commentRate,
-      daysSinceUpload: video.metrics.daysSinceUpload,
-      durationMinutes: video.metrics.durationMinutes,
+      ...createUsageSnapshot(video, getSnapshotContext(video)),
+      isTracked: !isTracked,
     });
-    setReviewedVideoIds((prev) => Array.from(new Set([video.videoId, ...prev])));
+    await refreshUsageLogs();
   };
 
   const filterBreakdown = useMemo(() => {
@@ -496,9 +568,9 @@ const KeywordSearch = ({ activeTab }) => {
   }, [activeTab, results, hiddenVideoIds, appliedFilters]);
 
   const visibleVideos = useMemo(() => {
-    if (activeTab === 'archive') return savedVideos;
+    if (activeTab === 'archive') return archiveVideos;
     return sortVideos(filterBreakdown?.finalVideos || [], appliedFilters);
-  }, [activeTab, savedVideos, filterBreakdown, appliedFilters]);
+  }, [activeTab, archiveVideos, filterBreakdown, appliedFilters]);
 
   const hiddenSubscriberVideos = useMemo(() => {
     if (activeTab === 'archive') return [];
@@ -517,9 +589,11 @@ const KeywordSearch = ({ activeTab }) => {
       top,
       avgRatio,
       savedCount: savedVideos.length,
+      reviewedCount: reviewedVideoIds.length,
+      trackedCount: trackedVideoIds.length,
       hiddenCount: hiddenVideoIds.length,
     };
-  }, [visibleVideos, savedVideos.length, hiddenVideoIds.length]);
+  }, [visibleVideos, savedVideos.length, reviewedVideoIds.length, trackedVideoIds.length, hiddenVideoIds.length]);
 
   const exportResults = () => {
     const csvData = visibleVideos.map((video) => ({
@@ -568,11 +642,11 @@ const KeywordSearch = ({ activeTab }) => {
             <div>
               <p className="text-sm font-bold text-blue-700">{selectedPreset.label}</p>
               <h2 className="mt-1 text-2xl font-black text-slate-950">
-                {isArchive ? '보관한 영상' : activeProfile.title}
+                {isArchive ? '후보 보관함' : activeProfile.title}
               </h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
                 {isArchive
-                  ? '저장해둔 영상을 다시 확인합니다. 데이터는 이 브라우저에만 저장됩니다.'
+                  ? '저장, 확인함, 추적 중으로 표시한 후보를 스냅샷 기준으로 다시 확인합니다. 데이터는 이 브라우저에만 저장됩니다.'
                   : activeProfile.description}
               </p>
             </div>
@@ -659,7 +733,7 @@ const KeywordSearch = ({ activeTab }) => {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-bold text-slate-500">결과</p>
             <p className="mt-1 text-2xl font-black text-slate-950">{summary.count.toLocaleString('ko-KR')}</p>
@@ -671,6 +745,14 @@ const KeywordSearch = ({ activeTab }) => {
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-bold text-slate-500">보관함</p>
             <p className="mt-1 text-2xl font-black text-slate-950">{summary.savedCount.toLocaleString('ko-KR')}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-bold text-slate-500">확인함</p>
+            <p className="mt-1 text-2xl font-black text-slate-950">{summary.reviewedCount.toLocaleString('ko-KR')}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-bold text-slate-500">추적 중</p>
+            <p className="mt-1 text-2xl font-black text-slate-950">{summary.trackedCount.toLocaleString('ko-KR')}</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-bold text-slate-500">제외</p>
@@ -685,12 +767,14 @@ const KeywordSearch = ({ activeTab }) => {
           onSave={saveVideo}
           onHide={hideVideo}
           onToggleReviewed={toggleReviewedVideo}
+          onToggleTracked={toggleTrackedVideo}
           savedVideoIds={savedVideoIds}
           hiddenVideoIds={hiddenVideoIds}
           reviewedVideoIds={reviewedVideoIds}
+          trackedVideoIds={trackedVideoIds}
           emptyMessage={
             isArchive
-              ? '저장된 영상이 없습니다.'
+              ? '보관함에 저장, 확인함, 추적 중 영상이 없습니다.'
               : loading
                 ? progress || '검색 중입니다. 키워드별 후보 영상을 수집하고 있습니다.'
                 : hasSearched
@@ -707,9 +791,11 @@ const KeywordSearch = ({ activeTab }) => {
               onSave={saveVideo}
               onHide={hideVideo}
               onToggleReviewed={toggleReviewedVideo}
+              onToggleTracked={toggleTrackedVideo}
               savedVideoIds={savedVideoIds}
               hiddenVideoIds={hiddenVideoIds}
               reviewedVideoIds={reviewedVideoIds}
+              trackedVideoIds={trackedVideoIds}
               emptyMessage="구독자 미공개 참고 후보가 없습니다."
             />
           </div>
