@@ -1,4 +1,5 @@
 import { USAGE_LOG_STORE, dbPromise } from './appDb';
+import { saveCandidateSnapshot } from './candidateSnapshots';
 import { getVideoMetrics } from './videoMetrics';
 
 export const getUsageLogs = async () => {
@@ -67,6 +68,10 @@ export const upsertUsageLog = async (entry) => {
   }
 
   await db.put(USAGE_LOG_STORE, nextEntry);
+
+  if (entry.snapshotAt) {
+    await saveCandidateSnapshot(nextEntry);
+  }
 };
 
 export const deleteUsageLog = async (videoId) => {

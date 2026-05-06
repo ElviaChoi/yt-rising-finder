@@ -5,12 +5,12 @@ export const exportToCSV = (data, filename = 'youtube_results.csv') => {
   }
 
   const headers = [
-    '반응점수',
+    '후보점수',
     '제목',
     '채널명',
     '구독자수',
     '조회수',
-    '조회수/구독자',
+    '조회/구독',
     '시간당 조회수',
     '댓글수',
     '길이(분)',

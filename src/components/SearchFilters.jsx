@@ -12,7 +12,7 @@ const numberOptions = [
 
 const countryOptions = [
   { value: 'KR', label: '한국 KR' },
-  { value: 'ALL', label: '전세계/제한 없음' },
+  { value: 'ALL', label: '전세계 제한 없음' },
   { value: 'US', label: '미국 US' },
   { value: 'JP', label: '일본 JP' },
   { value: 'GB', label: '영국 GB' },
@@ -30,6 +30,9 @@ const lengthLabels = {
   '60plus': '60분 이상',
 };
 
+const selectClassName =
+  'w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-2 pr-10 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
+
 const FieldLabel = ({ icon, children }) => (
   <span className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
     <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-slate-100 px-1 text-[11px] text-slate-600">
@@ -39,21 +42,9 @@ const FieldLabel = ({ icon, children }) => (
   </span>
 );
 
-const formatViews = (value) =>
-  value === '0' ? '제한 없음' : `${Number(value || 0).toLocaleString('ko-KR')}회 이상`;
-
-const formatSubscribers = (value) =>
-  value === '999999999' ? '제한 없음' : `${Number(value || 0).toLocaleString('ko-KR')}명 이하`;
-
-const selectClassName =
-  'w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-2 pr-10 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
-
-const wideSelectClassName =
-  'w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-2 pr-10 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
-
-const SelectBox = ({ value, onChange, className = selectClassName, children }) => (
+const SelectBox = ({ value, onChange, children }) => (
   <div className="relative">
-    <select value={value} onChange={onChange} className={className}>
+    <select value={value} onChange={onChange} className={selectClassName}>
       {children}
     </select>
     <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-black text-slate-900">
@@ -61,6 +52,12 @@ const SelectBox = ({ value, onChange, className = selectClassName, children }) =
     </span>
   </div>
 );
+
+const formatViews = (value) =>
+  value === '0' ? '제한 없음' : `${Number(value || 0).toLocaleString('ko-KR')}회 이상`;
+
+const formatSubscribers = (value) =>
+  value === '999999999' ? '제한 없음' : `${Number(value || 0).toLocaleString('ko-KR')}명 이하`;
 
 const SearchFilters = ({
   filters,
@@ -87,7 +84,7 @@ const SearchFilters = ({
         <div className="mb-3">
           <h2 className="text-lg font-bold text-slate-950">소재 카테고리</h2>
           <p className="mt-1 text-sm leading-5 text-slate-500">
-            큰 주제로 영상 풀을 모은 뒤, 작은 채널 롱폼 기회를 필터로 검증합니다.
+            주제별 영상 수요를 작은 채널 롱폼 기회 필터로 검증합니다.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -114,16 +111,16 @@ const SearchFilters = ({
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 text-sm text-blue-700">
             Q
           </span>
-          검색조건
+          검색 조건
         </h2>
 
         <div className="mb-4 rounded-md bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">
-          새 검색 조건은 YouTube API를 다시 호출할 때 쓰고, 결과 필터는 이미 검색된 결과 안에서 다시 거릅니다.
+          후보 찾기는 YouTube API를 호출하고, 결과 필터는 이미 검색된 결과 안에서 다시 걸러냅니다.
         </div>
 
         <div className="space-y-4">
           <div className="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-            새 검색 조건
+            검색 조건
           </div>
 
           <label className="block">
@@ -131,7 +128,7 @@ const SearchFilters = ({
             <input
               value={filters.keyword}
               onChange={(event) => onFilterChange('keyword', event.target.value)}
-              placeholder="예: 노후 생활비, 세계경제, 인간관계"
+              placeholder="예: 은퇴 생활비, 세계경제, 인간관계"
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </label>
@@ -209,7 +206,7 @@ const SearchFilters = ({
               <option value="16">아주 넓게</option>
             </SelectBox>
             <p className="mt-1 text-xs text-slate-500">
-              예상 검색 호출 {estimatedSearchCalls.toLocaleString('ko-KR')}회, 약{' '}
+              예상 검색 호출 {estimatedSearchCalls.toLocaleString('ko-KR')}회 ·{' '}
               {(estimatedSearchCalls * 100).toLocaleString('ko-KR')} quota
             </p>
           </label>
@@ -241,7 +238,7 @@ const SearchFilters = ({
               </button>
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-              <span>새 API 호출</span>
+              <span>API 호출</span>
               <span className="text-right font-bold">{(cacheStats?.apiCalls || 0).toLocaleString('ko-KR')}회</span>
               <span>캐시 적중</span>
               <span className="text-right font-bold">{(cacheStats?.hits || 0).toLocaleString('ko-KR')}회</span>
@@ -252,7 +249,9 @@ const SearchFilters = ({
 
           {hasResults && (
             <div className="rounded-md bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-800">
-              검색 원본 {rawResultCount.toLocaleString('ko-KR')}개 중 현재 적용 기준: 조회수 {formatViews(applied.minViews)}, 구독자 {formatSubscribers(applied.subscriberLimit)}, 길이 {lengthLabels[applied.length]}
+              검색 원본 {rawResultCount.toLocaleString('ko-KR')}개 중 현재 적용 기준: 조회수{' '}
+              {formatViews(applied.minViews)}, 구독자 {formatSubscribers(applied.subscriberLimit)}, 길이{' '}
+              {lengthLabels[applied.length]}
             </div>
           )}
 
@@ -293,11 +292,11 @@ const SearchFilters = ({
                 value={filters.length}
                 onChange={(event) => onFilterChange('length', event.target.value)}
               >
-              <option value="all">전체</option>
-              <option value="shortsOut">쇼츠 제외(3분 미만)</option>
-              <option value="8plus">8분 이상</option>
-              <option value="12plus">12분 이상</option>
-              <option value="15plus">15분 이상</option>
+                <option value="all">전체</option>
+                <option value="shortsOut">쇼츠 제외(3분 미만)</option>
+                <option value="8plus">8분 이상</option>
+                <option value="12plus">12분 이상</option>
+                <option value="15plus">15분 이상</option>
                 <option value="20plus">20분 이상(long)</option>
                 <option value="30plus">30분 이상</option>
                 <option value="40plus">40분 이상</option>
@@ -310,11 +309,10 @@ const SearchFilters = ({
               <SelectBox
                 value={filters.sortBy}
                 onChange={(event) => onFilterChange('sortBy', event.target.value)}
-                className={wideSelectClassName}
               >
-                <option value="risingScore">작은 채널 반응순</option>
-                <option value="viewSubscriberRatio">조회수/구독자 높은 순</option>
-                <option value="hourlyViews">시간당 조회수 높은 순</option>
+                <option value="risingScore">작은 채널 반응도</option>
+                <option value="viewSubscriberRatio">조회/구독 높은 순</option>
+                <option value="hourlyViews">시간당 조회 높은 순</option>
                 <option value="views">조회수 높은 순</option>
                 <option value="publishedAt">최신순</option>
               </SelectBox>
@@ -331,12 +329,12 @@ const SearchFilters = ({
           </button>
 
           <p className="text-xs leading-5 text-slate-500">
-            후보 찾기는 새로 검색하고, 필터 적용은 이미 검색된 결과 안에서 조건을 다시 겁니다.
+            후보 찾기는 새로 검색하고, 필터 적용은 이미 검색된 결과 안에서 조건만 다시 계산합니다.
           </p>
 
           {activeTab === 'competitor' && (
             <div className="rounded-md bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-              해외 원형 참고는 영어권은 US/en, 일본어권은 JP/ja로 검색합니다. API 검색은 20분 초과(long) 영상만 수집합니다.
+              해외 원형 참고는 영어권 US/en, 일본어권 JP/ja로 검색합니다. API 검색은 20분 초과(long) 영상만 수집합니다.
             </div>
           )}
         </div>

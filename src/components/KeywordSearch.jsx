@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { expansionPresets, topicPresets } from '../data/topicPresets';
 import { getChannelInfo, getVideoDetails, searchVideos } from '../services/youtubeApi';
-import { getDateRange } from '../utils/dateCalculator';
-import { exportToCSV } from '../utils/csvExporter';
-import { enrichVideo } from '../utils/videoMetrics';
 import { clearApiCache } from '../utils/apiCache';
-import { createUsageSnapshot, getUsageLogs, upsertUsageLog } from '../utils/usageLog';
+import { exportToCSV } from '../utils/csvExporter';
+import { getDateRange } from '../utils/dateCalculator';
+import { getUsageLogs, createUsageSnapshot, upsertUsageLog } from '../utils/usageLog';
+import { enrichVideo } from '../utils/videoMetrics';
 import SearchFilters from './SearchFilters';
 import VideoPreview from './VideoPreview';
 import VideoTable from './VideoTable';
@@ -33,7 +33,7 @@ const tabProfiles = {
   },
   daily: {
     title: '국내 수요 탐색',
-    description: '국내에서 이미 조회수를 내는 정보형 롱폼 소재와 제목 패턴을 넓게 확인합니다.',
+    description: '국내에서 이미 조회수가 있는 정보형 롱폼 소재와 제목 패턴을 넓게 확인합니다.',
     filters: {
       minViews: '10000',
       subscriberLimit: '999999999',
@@ -48,7 +48,7 @@ const tabProfiles = {
   },
   competitor: {
     title: '해외 원형 참고',
-    description: '해외에서 반복되는 세계경제·지리·교양형 소재 원형을 참고하는 모드입니다.',
+    description: '해외에서 반복되는 소재 원형을 참고하는 모드입니다.',
     filters: {
       minViews: '10000',
       subscriberLimit: '999999999',
@@ -79,12 +79,11 @@ const tabProfiles = {
   },
 };
 
-const readStoredArray = (key) => {
-  try {
-    return JSON.parse(localStorage.getItem(key) || '[]');
-  } catch {
-    return [];
-  }
+const initialPreset = topicPresets[0];
+
+const overseasLanguageProfiles = {
+  en: { regionCode: 'US', relevanceLanguage: 'en', label: '영어권' },
+  ja: { regionCode: 'JP', relevanceLanguage: 'ja', label: '일본어권' },
 };
 
 const emptyCacheStats = {
@@ -92,6 +91,14 @@ const emptyCacheStats = {
   misses: 0,
   apiCalls: 0,
   quota: 0,
+};
+
+const readStoredArray = (key) => {
+  try {
+    return JSON.parse(localStorage.getItem(key) || '[]');
+  } catch {
+    return [];
+  }
 };
 
 const mergeCacheStats = (stats, cache) => ({
@@ -102,16 +109,20 @@ const mergeCacheStats = (stats, cache) => ({
 });
 
 const isLegacyReviewedLog = (log) => log.isReviewed == null && log.isTracked == null && log.isSaved == null;
-
 const getLogIsReviewed = (log) => log.isReviewed === true || isLegacyReviewedLog(log);
-
 const getLogIsActive = (log) => getLogIsReviewed(log) || log.isTracked === true || log.isSaved === true;
 
+const getKeywordText = (keyword) => (typeof keyword === 'string' ? keyword : keyword?.q || '');
+const getKeywordNote = (keyword) => (typeof keyword === 'string' ? '' : keyword?.note || '');
+
+const getOverseasLanguages = (value) => {
+  if (value === 'both') return ['en', 'ja'];
+  if (value === 'ja') return ['ja'];
+  return ['en'];
+};
+
 const usageLogToVideo = (log) => {
-  const views = Number(log.viewCount ?? log.views ?? 0);
   const subscribers = log.subscriberCount ?? log.subscribers ?? null;
-  const comments = Number(log.commentCount ?? log.comments ?? 0);
-  const risingScore = Number(log.score ?? log.risingScore ?? 0);
 
   return {
     videoId: log.videoId,
@@ -134,34 +145,18 @@ const usageLogToVideo = (log) => {
       duration: `PT${Math.round(Math.max(Number(log.durationMinutes || 0), 0))}M`,
     },
     metrics: {
-      views,
+      views: Number(log.viewCount ?? log.views ?? 0),
       subscribers,
-      comments,
+      comments: Number(log.commentCount ?? log.comments ?? 0),
       hourlyViews: Number(log.hourlyViews || 0),
       viewSubscriberRatio: Number(log.viewSubscriberRatio || 0),
       commentRate: Number(log.commentRate || 0),
       durationMinutes: Number(log.durationMinutes || 0),
       daysSinceUpload: Number(log.daysSinceUpload || 0),
-      risingScore,
+      risingScore: Number(log.score ?? log.risingScore ?? 0),
       hasHiddenSubscribers: Boolean(log.hasHiddenSubscribers || subscribers == null),
     },
   };
-};
-
-const initialPreset = topicPresets[0];
-
-const overseasLanguageProfiles = {
-  en: { regionCode: 'US', relevanceLanguage: 'en', label: '영어권' },
-  ja: { regionCode: 'JP', relevanceLanguage: 'ja', label: '일본어권' },
-};
-
-const getKeywordText = (keyword) => (typeof keyword === 'string' ? keyword : keyword?.q || '');
-const getKeywordNote = (keyword) => (typeof keyword === 'string' ? '' : keyword?.note || '');
-
-const getOverseasLanguages = (value) => {
-  if (value === 'both') return ['en', 'ja'];
-  if (value === 'ja') return ['ja'];
-  return ['en'];
 };
 
 const KeywordSearch = ({ activeTab }) => {
@@ -171,11 +166,15 @@ const KeywordSearch = ({ activeTab }) => {
     duration: '90',
     ...tabProfiles.rising.filters,
   };
+
   const [filters, setFilters] = useState(initialFilters);
   const [appliedFilters, setAppliedFilters] = useState(initialFilters);
   const [results, setResults] = useState([]);
   const [savedVideos, setSavedVideos] = useState(() => readStoredArray(STORAGE_KEYS.saved));
   const [hiddenVideoIds, setHiddenVideoIds] = useState(() => readStoredArray(STORAGE_KEYS.hidden));
+  const [usageLogs, setUsageLogs] = useState([]);
+  const [reviewedVideoIds, setReviewedVideoIds] = useState([]);
+  const [trackedVideoIds, setTrackedVideoIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
@@ -183,14 +182,13 @@ const KeywordSearch = ({ activeTab }) => {
   const [rawSearchCount, setRawSearchCount] = useState(0);
   const [showHiddenSubscriberVideos, setShowHiddenSubscriberVideos] = useState(false);
   const [cacheStats, setCacheStats] = useState(emptyCacheStats);
-  const [usageLogs, setUsageLogs] = useState([]);
-  const [reviewedVideoIds, setReviewedVideoIds] = useState([]);
-  const [trackedVideoIds, setTrackedVideoIds] = useState([]);
 
   const activeProfile = tabProfiles[activeTab] || tabProfiles.rising;
+  const isArchive = activeTab === 'archive';
 
   useEffect(() => {
-    if (activeTab === 'archive') return;
+    if (isArchive) return;
+
     setFilters((prev) => {
       const nextFilters = {
         ...prev,
@@ -199,7 +197,7 @@ const KeywordSearch = ({ activeTab }) => {
       setAppliedFilters(nextFilters);
       return nextFilters;
     });
-  }, [activeTab]);
+  }, [activeTab, activeProfile, isArchive]);
 
   const refreshUsageLogs = async () => {
     const logs = await getUsageLogs();
@@ -261,9 +259,7 @@ const KeywordSearch = ({ activeTab }) => {
     }
 
     if (activeTab === 'competitor') {
-      const languages = getOverseasLanguages(filters.overseasLanguage);
-
-      languages.forEach((language) => {
+      getOverseasLanguages(filters.overseasLanguage).forEach((language) => {
         const profile = overseasLanguageProfiles[language] || overseasLanguageProfiles.en;
         const seeds = selectedPreset.overseasSeeds?.[language] || [];
 
@@ -369,10 +365,6 @@ const KeywordSearch = ({ activeTab }) => {
     };
   };
 
-  const applyFilters = (videos, filterSet = appliedFilters) => {
-    return getFilterBreakdown(videos, filterSet).finalVideos;
-  };
-
   const sortVideos = (videos, filterSet = appliedFilters) => {
     return [...videos].sort((a, b) => {
       if (filterSet.sortBy === 'publishedAt') {
@@ -419,6 +411,7 @@ const KeywordSearch = ({ activeTab }) => {
       for (let index = 0; index < queries.length; index += 1) {
         const queryItem = queries[index];
         const query = queryItem.query;
+
         for (let durationIndex = 0; durationIndex < searchDurations.length; durationIndex += 1) {
           const videoDuration = searchDurations[durationIndex];
           const durationLabel = videoDuration ? `/${videoDuration}` : '';
@@ -434,9 +427,8 @@ const KeywordSearch = ({ activeTab }) => {
             ...dateRange,
           });
           nextCacheStats = mergeCacheStats(nextCacheStats, searchResult.cache);
-          const searchResponse = searchResult.data;
 
-          const videoIds = (searchResponse.items || []).map((item) => item.id.videoId).filter(Boolean);
+          const videoIds = (searchResult.data.items || []).map((item) => item.id.videoId).filter(Boolean);
           if (videoIds.length === 0) continue;
 
           const detailsResult = await getVideoDetails(videoIds);
@@ -445,9 +437,8 @@ const KeywordSearch = ({ activeTab }) => {
           const channelIds = [...new Set(details.map((video) => video.snippet.channelId))];
           const channelsResult = await getChannelInfo(channelIds);
           nextCacheStats = mergeCacheStats(nextCacheStats, channelsResult.cache);
-          const channels = channelsResult.data;
           const channelMap = Object.fromEntries(
-            channels.map((channel) => [
+            channelsResult.data.map((channel) => [
               channel.id,
               {
                 subscribers: Number(channel.statistics?.subscriberCount || 0),
@@ -487,7 +478,6 @@ const KeywordSearch = ({ activeTab }) => {
       setAppliedFilters(filters);
       setRawSearchCount(collected.length);
       setCacheStats(nextCacheStats);
-      setProgress('');
     } catch (searchError) {
       console.error(searchError);
       if (searchError.response?.status === 403) {
@@ -502,8 +492,8 @@ const KeywordSearch = ({ activeTab }) => {
   };
 
   const getSnapshotContext = (video) => ({
-    activeTab: activeTab === 'archive' ? video.activeTab : activeTab,
-    categoryId: activeTab === 'archive' ? video.categoryId : appliedFilters.presetId,
+    activeTab: isArchive ? video.activeTab : activeTab,
+    categoryId: isArchive ? video.categoryId : appliedFilters.presetId,
   });
 
   const saveVideo = async (video) => {
@@ -543,39 +533,35 @@ const KeywordSearch = ({ activeTab }) => {
   };
 
   const toggleReviewedVideo = async (video) => {
-    const isReviewed = reviewedVideoIds.includes(video.videoId);
-
     await upsertUsageLog({
       ...createUsageSnapshot(video, getSnapshotContext(video)),
-      isReviewed: !isReviewed,
+      isReviewed: !reviewedVideoIds.includes(video.videoId),
     });
     await refreshUsageLogs();
   };
 
   const toggleTrackedVideo = async (video) => {
-    const isTracked = trackedVideoIds.includes(video.videoId);
-
     await upsertUsageLog({
       ...createUsageSnapshot(video, getSnapshotContext(video)),
-      isTracked: !isTracked,
+      isTracked: !trackedVideoIds.includes(video.videoId),
     });
     await refreshUsageLogs();
   };
 
   const filterBreakdown = useMemo(() => {
-    if (activeTab === 'archive') return null;
+    if (isArchive) return null;
     return getFilterBreakdown(results, appliedFilters);
-  }, [activeTab, results, hiddenVideoIds, appliedFilters]);
+  }, [isArchive, results, hiddenVideoIds, appliedFilters]);
 
   const visibleVideos = useMemo(() => {
-    if (activeTab === 'archive') return archiveVideos;
+    if (isArchive) return archiveVideos;
     return sortVideos(filterBreakdown?.finalVideos || [], appliedFilters);
-  }, [activeTab, archiveVideos, filterBreakdown, appliedFilters]);
+  }, [isArchive, archiveVideos, filterBreakdown, appliedFilters]);
 
   const hiddenSubscriberVideos = useMemo(() => {
-    if (activeTab === 'archive') return [];
+    if (isArchive) return [];
     return sortVideos(filterBreakdown?.hiddenSubscriberVideos || [], appliedFilters);
-  }, [activeTab, filterBreakdown, appliedFilters]);
+  }, [isArchive, filterBreakdown, appliedFilters]);
 
   const summary = useMemo(() => {
     const top = visibleVideos[0];
@@ -614,8 +600,6 @@ const KeywordSearch = ({ activeTab }) => {
 
     exportToCSV(csvData, `senior_youtube_finder_${Date.now()}.csv`);
   };
-
-  const isArchive = activeTab === 'archive';
 
   return (
     <div className="mx-auto grid w-full max-w-[1500px] grid-cols-1 gap-5 overflow-x-hidden px-4 py-6 sm:px-6 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] lg:px-8">
@@ -726,7 +710,7 @@ const KeywordSearch = ({ activeTab }) => {
             </div>
             {filterBreakdown.hiddenSubscribers > 0 && (
               <p className="mt-3 text-xs leading-5 text-slate-500">
-                구독자 미공개 채널 {filterBreakdown.hiddenSubscribers.toLocaleString('ko-KR')}개는 1만 이하 여부를
+                구독자 미공개 채널 {filterBreakdown.hiddenSubscribers.toLocaleString('ko-KR')}개는 작은 채널 여부를
                 판단할 수 없어 별도 참고 후보로 분리했습니다.
               </p>
             )}
@@ -778,8 +762,8 @@ const KeywordSearch = ({ activeTab }) => {
               : loading
                 ? progress || '검색 중입니다. 키워드별 후보 영상을 수집하고 있습니다.'
                 : hasSearched
-                  ? '검색은 되었지만 현재 필터를 통과한 영상이 없습니다. 기간, 조회수, 길이, 구독자 조건을 완화해보세요.'
-                  : '소재 카테고리와 검색 조건을 확인한 뒤 후보 찾기를 눌러 작은 채널 롱폼 사례를 수집해보세요.'
+                  ? '검색은 끝났지만 현재 필터를 통과한 영상이 없습니다. 기간, 조회수, 길이, 구독자 조건을 완화해보세요.'
+                  : '현재 카테고리와 검색 조건을 확인한 뒤 후보 찾기를 눌러 영상을 수집해보세요.'
           }
         />
 

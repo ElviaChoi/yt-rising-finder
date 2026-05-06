@@ -13,7 +13,7 @@ const getCandidateSummary = (metrics) => {
   }
 
   parts.push(`시간당 ${formatNumber(metrics.hourlyViews)}회`);
-  parts.push(`${metrics.daysSinceUpload}일 전`);
+  parts.push(`${metrics.daysSinceUpload}일차`);
 
   if (metrics.durationMinutes >= 12 && metrics.durationMinutes <= 40) {
     parts.push('12~40분 롱폼');
@@ -41,7 +41,7 @@ const VideoTable = ({
   if (!videos || videos.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 bg-white px-6 py-16 text-center text-slate-500">
-        {emptyMessage || '검색은 되었지만 현재 필터를 통과한 영상이 없습니다. 조건을 완화해보세요.'}
+        {emptyMessage || '현재 조건을 통과한 영상이 없습니다. 조건을 완화해보세요.'}
       </div>
     );
   }
@@ -55,7 +55,7 @@ const VideoTable = ({
               <th className="px-3 py-3 text-left text-xs font-semibold">썸네일</th>
               <th className="px-3 py-3 text-left text-xs font-semibold">제목</th>
               <th className="px-3 py-3 text-left text-xs font-semibold">채널</th>
-              <th className="px-3 py-3 text-right text-xs font-semibold">반응점수</th>
+              <th className="px-3 py-3 text-right text-xs font-semibold">후보점수</th>
               <th className="px-3 py-3 text-right text-xs font-semibold">구독자</th>
               <th className="px-3 py-3 text-right text-xs font-semibold">조회수</th>
               <th className="px-3 py-3 text-right text-xs font-semibold">조회/구독</th>
@@ -161,7 +161,7 @@ const VideoTable = ({
                   </td>
                   <td
                     className="px-3 py-3 text-right align-top text-sm font-black text-rose-600"
-                    title="반응점수는 시간당 조회수, 조회수/구독자 비율, 댓글률, 최근성, 영상 길이, 작은 채널 보너스를 합산합니다."
+                    title="시간당 조회수, 조회/구독 비율, 댓글 반응, 최근성, 영상 길이, 작은 채널 보너스를 합산합니다."
                   >
                     {metrics.risingScore}
                   </td>
@@ -179,7 +179,7 @@ const VideoTable = ({
                   </td>
                   <td className="px-3 py-3 align-top text-sm text-slate-600">
                     <div>{formatDate(video.snippet.publishedAt)}</div>
-                    <div className="text-xs text-slate-400">{metrics.daysSinceUpload}일 전</div>
+                    <div className="text-xs text-slate-400">{metrics.daysSinceUpload}일차</div>
                   </td>
                   <td className="px-3 py-3 align-top">
                     <div className="flex flex-wrap gap-2">
