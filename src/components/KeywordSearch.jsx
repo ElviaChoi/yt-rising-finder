@@ -114,6 +114,12 @@ const getLogIsActive = (log) => getLogIsReviewed(log) || log.isTracked === true 
 
 const getKeywordText = (keyword) => (typeof keyword === 'string' ? keyword : keyword?.q || '');
 const getKeywordNote = (keyword) => (typeof keyword === 'string' ? '' : keyword?.note || '');
+const normalizeQueryKey = (query) =>
+  query
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/\s+/g, '')
+    .replace(/[^\p{L}\p{N}]/gu, '');
 
 const getOverseasLanguages = (value) => {
   if (value === 'both') return ['en', 'ja'];
@@ -246,6 +252,16 @@ const KeywordSearch = ({ activeTab }) => {
     const expansion = expansionPresets.find((preset) => preset.id === filters.expansionId);
     const maxKeywords = Number(filters.maxKeywords);
     const queryItems = [];
+    const usedQueryKeys = new Set();
+
+    const appendQueryItem = (item, limit = maxKeywords) => {
+      const query = item.query?.trim();
+      const normalizedKey = normalizeQueryKey(query || '');
+      if (!query || !normalizedKey || usedQueryKeys.has(normalizedKey) || queryItems.length >= limit) return;
+
+      usedQueryKeys.add(normalizedKey);
+      queryItems.push({ ...item, query });
+    };
 
     if (manualKeyword) {
       return [
@@ -264,18 +280,21 @@ const KeywordSearch = ({ activeTab }) => {
         const seeds = selectedPreset.overseasSeeds?.[language] || [];
 
         seeds.slice(0, maxKeywords).forEach((seed) => {
-          queryItems.push({
-            query: getKeywordText(seed),
-            note: getKeywordNote(seed),
-            language,
-            languageLabel: profile.label,
-            regionCode: profile.regionCode,
-            relevanceLanguage: profile.relevanceLanguage,
-          });
+          appendQueryItem(
+            {
+              query: getKeywordText(seed),
+              note: getKeywordNote(seed),
+              language,
+              languageLabel: profile.label,
+              regionCode: profile.regionCode,
+              relevanceLanguage: profile.relevanceLanguage,
+            },
+            Number.MAX_SAFE_INTEGER
+          );
         });
       });
 
-      return queryItems.filter((item) => item.query);
+      return queryItems;
     }
 
     const baseQueries = selectedPreset.keywords.map((keyword) => ({
@@ -283,29 +302,22 @@ const KeywordSearch = ({ activeTab }) => {
       note: getKeywordNote(keyword),
     }));
 
-    baseQueries.forEach((item) => {
-      if (queryItems.length < maxKeywords && item.query) queryItems.push(item);
-    });
+    baseQueries.forEach((item) => appendQueryItem(item));
 
     if (queryItems.length < maxKeywords) {
       for (const baseQuery of baseQueries) {
         for (const boost of expansion?.queryBoosts || []) {
-          if (queryItems.length >= maxKeywords) break;
-          queryItems.push({
+          appendQueryItem({
             query: `${baseQuery.query} ${boost}`,
             note: baseQuery.note,
           });
+          if (queryItems.length >= maxKeywords) break;
         }
         if (queryItems.length >= maxKeywords) break;
       }
     }
 
-    const unique = new Map();
-    queryItems.forEach((item) => {
-      if (!unique.has(item.query)) unique.set(item.query, item);
-    });
-
-    return Array.from(unique.values()).slice(0, maxKeywords);
+    return queryItems;
   };
 
   const estimatedSearchCalls = useMemo(() => {
