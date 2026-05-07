@@ -200,10 +200,10 @@ const SearchFilters = ({
               value={filters.maxKeywords}
               onChange={(event) => onFilterChange('maxKeywords', event.target.value)}
             >
-              <option value="5">가볍게</option>
-              <option value="8">기본</option>
-              <option value="12">넓게</option>
-              <option value="16">아주 넓게</option>
+              <option value="5">기본</option>
+              <option value="8">넓게</option>
+              <option value="12">많이</option>
+              <option value="16">아주 많이</option>
             </SelectBox>
             <p className="mt-1 text-xs text-slate-500">
               예상 검색 호출 {estimatedSearchCalls.toLocaleString('ko-KR')}회 ·{' '}

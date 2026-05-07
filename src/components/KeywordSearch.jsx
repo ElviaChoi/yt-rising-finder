@@ -26,7 +26,7 @@ const tabProfiles = {
       sortBy: 'risingScore',
       countryCode: 'KR',
       expansionId: 'none',
-      maxKeywords: '8',
+      maxKeywords: '5',
     },
     searchOrder: 'date',
     searchDurations: ['medium', 'long'],
@@ -41,7 +41,7 @@ const tabProfiles = {
       sortBy: 'views',
       countryCode: 'KR',
       expansionId: 'none',
-      maxKeywords: '12',
+      maxKeywords: '5',
     },
     searchOrder: 'relevance',
     searchDurations: ['long'],
@@ -72,7 +72,7 @@ const tabProfiles = {
       sortBy: 'risingScore',
       countryCode: 'KR',
       expansionId: 'question',
-      maxKeywords: '8',
+      maxKeywords: '5',
     },
     searchOrder: 'relevance',
     searchDurations: ['medium', 'long'],
@@ -114,6 +114,8 @@ const getLogIsActive = (log) => getLogIsReviewed(log) || log.isTracked === true 
 
 const getKeywordText = (keyword) => (typeof keyword === 'string' ? keyword : keyword?.q || '');
 const getKeywordNote = (keyword) => (typeof keyword === 'string' ? '' : keyword?.note || '');
+const getCategoryLabel = (categoryId) =>
+  topicPresets.find((preset) => preset.id === categoryId)?.label || '카테고리 없음';
 const normalizeQueryKey = (query) =>
   query
     .toLowerCase()
@@ -188,6 +190,7 @@ const KeywordSearch = ({ activeTab }) => {
   const [rawSearchCount, setRawSearchCount] = useState(0);
   const [showHiddenSubscriberVideos, setShowHiddenSubscriberVideos] = useState(false);
   const [cacheStats, setCacheStats] = useState(emptyCacheStats);
+  const [archiveCategoryId, setArchiveCategoryId] = useState('all');
 
   const activeProfile = tabProfiles[activeTab] || tabProfiles.rising;
   const isArchive = activeTab === 'archive';
@@ -238,6 +241,15 @@ const KeywordSearch = ({ activeTab }) => {
 
     return [...logVideos, ...savedOnlyVideos];
   }, [activeUsageLogs, savedVideos, usageLogVideoIds]);
+  const archiveCategoryCounts = useMemo(() => {
+    const counts = new Map();
+    archiveVideos.forEach((video) => {
+      const categoryId = video.categoryId || 'uncategorized';
+      counts.set(categoryId, (counts.get(categoryId) || 0) + 1);
+    });
+
+    return counts;
+  }, [archiveVideos]);
 
   const handleFilterChange = (name, value) => {
     setFilters((prev) => ({ ...prev, [name]: value }));
@@ -510,10 +522,15 @@ const KeywordSearch = ({ activeTab }) => {
 
   const saveVideo = async (video) => {
     const willSave = !(savedVideoIds.includes(video.videoId) || video.isSaved === true);
+    const savedVideo = {
+      ...video,
+      activeTab: isArchive ? video.activeTab : activeTab,
+      categoryId: isArchive ? video.categoryId : appliedFilters.presetId,
+    };
 
     setSavedVideos((prev) => {
       const next = willSave
-        ? [video, ...prev.filter((item) => item.videoId !== video.videoId)]
+        ? [savedVideo, ...prev.filter((item) => item.videoId !== video.videoId)]
         : prev.filter((item) => item.videoId !== video.videoId);
       localStorage.setItem(STORAGE_KEYS.saved, JSON.stringify(next));
       return next;
@@ -566,9 +583,17 @@ const KeywordSearch = ({ activeTab }) => {
   }, [isArchive, results, hiddenVideoIds, appliedFilters]);
 
   const visibleVideos = useMemo(() => {
-    if (isArchive) return archiveVideos;
+    if (isArchive) {
+      const filteredVideos =
+        archiveCategoryId === 'all'
+          ? archiveVideos
+          : archiveVideos.filter((video) => (video.categoryId || 'uncategorized') === archiveCategoryId);
+
+      return filteredVideos;
+    }
+
     return sortVideos(filterBreakdown?.finalVideos || [], appliedFilters);
-  }, [isArchive, archiveVideos, filterBreakdown, appliedFilters]);
+  }, [isArchive, archiveVideos, archiveCategoryId, filterBreakdown, appliedFilters]);
 
   const hiddenSubscriberVideos = useMemo(() => {
     if (isArchive) return [];
@@ -682,6 +707,59 @@ const KeywordSearch = ({ activeTab }) => {
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
             {error}
+          </div>
+        )}
+
+        {isArchive && archiveVideos.length > 0 && (
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3">
+              <p className="text-sm font-black text-slate-950">카테고리별 보관함</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                저장, 확인함, 추적 중 후보를 발견 당시 카테고리 기준으로 나눠 봅니다.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setArchiveCategoryId('all')}
+                className={`rounded-md px-3 py-2 text-xs font-bold transition ${
+                  archiveCategoryId === 'all'
+                    ? 'bg-slate-950 text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                전체 {archiveVideos.length.toLocaleString('ko-KR')}
+              </button>
+              {topicPresets
+                .filter((preset) => archiveCategoryCounts.has(preset.id))
+                .map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setArchiveCategoryId(preset.id)}
+                    className={`rounded-md px-3 py-2 text-xs font-bold transition ${
+                      archiveCategoryId === preset.id
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                    }`}
+                  >
+                    {preset.label} {archiveCategoryCounts.get(preset.id).toLocaleString('ko-KR')}
+                  </button>
+                ))}
+              {archiveCategoryCounts.has('uncategorized') && (
+                <button
+                  type="button"
+                  onClick={() => setArchiveCategoryId('uncategorized')}
+                  className={`rounded-md px-3 py-2 text-xs font-bold transition ${
+                    archiveCategoryId === 'uncategorized'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                  }`}
+                >
+                  {getCategoryLabel('')} {archiveCategoryCounts.get('uncategorized').toLocaleString('ko-KR')}
+                </button>
+              )}
+            </div>
           </div>
         )}
 
