@@ -26,6 +26,62 @@ const getCandidateSummary = (metrics) => {
   return parts.join(' · ');
 };
 
+const CandidateActions = ({
+  video,
+  isSaved,
+  isReviewed,
+  isTracked,
+  onSave,
+  onHide,
+  onToggleReviewed,
+  onToggleTracked,
+}) => (
+  <div className="mt-3 flex flex-wrap gap-2">
+    {onToggleReviewed && (
+      <button
+        type="button"
+        onClick={() => onToggleReviewed(video)}
+        className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+          isReviewed ? 'bg-blue-100 text-blue-800' : 'bg-slate-950 text-white hover:bg-slate-800'
+        }`}
+      >
+        {isReviewed ? '확인함' : '확인'}
+      </button>
+    )}
+    {onToggleTracked && (
+      <button
+        type="button"
+        onClick={() => onToggleTracked(video)}
+        className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+          isTracked ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+        }`}
+      >
+        {isTracked ? '추적 중' : '추적'}
+      </button>
+    )}
+    {onSave && (
+      <button
+        type="button"
+        onClick={() => onSave(video)}
+        className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+          isSaved ? 'bg-amber-100 text-amber-800' : 'bg-blue-600 text-white hover:bg-blue-700'
+        }`}
+      >
+        {isSaved ? '저장됨' : '저장'}
+      </button>
+    )}
+    {onHide && (
+      <button
+        type="button"
+        onClick={() => onHide(video)}
+        className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-200"
+      >
+        제외
+      </button>
+    )}
+  </div>
+);
+
 const VideoTable = ({
   videos,
   onSave,
@@ -49,7 +105,7 @@ const VideoTable = ({
   return (
     <div className="w-full max-w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="w-full max-w-full overflow-x-auto">
-        <table className="min-w-[1240px] divide-y divide-slate-200">
+        <table className="min-w-[1080px] divide-y divide-slate-200">
           <thead className="bg-slate-950 text-white">
             <tr>
               <th className="px-3 py-3 text-left text-xs font-semibold">썸네일</th>
@@ -63,7 +119,6 @@ const VideoTable = ({
               <th className="px-3 py-3 text-right text-xs font-semibold">댓글</th>
               <th className="px-3 py-3 text-right text-xs font-semibold">길이</th>
               <th className="px-3 py-3 text-left text-xs font-semibold">업로드</th>
-              <th className="px-3 py-3 text-left text-xs font-semibold">액션</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -148,6 +203,16 @@ const VideoTable = ({
                       </p>
                     )}
                     <p className="mt-2 text-xs leading-5 text-slate-500">{getCandidateSummary(metrics)}</p>
+                    <CandidateActions
+                      video={video}
+                      isSaved={isSaved}
+                      isReviewed={isReviewed}
+                      isTracked={isTracked}
+                      onSave={onSave}
+                      onHide={onHide}
+                      onToggleReviewed={onToggleReviewed}
+                      onToggleTracked={onToggleTracked}
+                    />
                   </td>
                   <td className="max-w-[150px] px-3 py-3 align-top text-sm text-slate-700">
                     <a
@@ -180,54 +245,6 @@ const VideoTable = ({
                   <td className="px-3 py-3 align-top text-sm text-slate-600">
                     <div>{formatDate(video.snippet.publishedAt)}</div>
                     <div className="text-xs text-slate-400">{metrics.daysSinceUpload}일차</div>
-                  </td>
-                  <td className="px-3 py-3 align-top">
-                    <div className="flex flex-wrap gap-2">
-                      {onToggleReviewed && (
-                        <button
-                          type="button"
-                          onClick={() => onToggleReviewed(video)}
-                          className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
-                            isReviewed
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-slate-950 text-white hover:bg-slate-800'
-                          }`}
-                        >
-                          {isReviewed ? '확인함' : '확인'}
-                        </button>
-                      )}
-                      {onToggleTracked && (
-                        <button
-                          type="button"
-                          onClick={() => onToggleTracked(video)}
-                          className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
-                            isTracked
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          }`}
-                        >
-                          {isTracked ? '추적 중' : '추적'}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => onSave(video)}
-                        className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
-                          isSaved
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-blue-600 text-white hover:bg-blue-700'
-                        }`}
-                      >
-                        {isSaved ? '저장됨' : '저장'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onHide(video)}
-                        className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-200"
-                      >
-                        제외
-                      </button>
-                    </div>
                   </td>
                 </tr>
               );
