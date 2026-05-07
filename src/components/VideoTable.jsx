@@ -2,6 +2,7 @@ import { formatDate, parseDurationMinSec } from '../utils/dateCalculator';
 import { getVideoMetrics } from '../utils/videoMetrics';
 
 const formatNumber = (value) => Number(value || 0).toLocaleString('ko-KR');
+const getFallbackThumbnail = (videoId) => (videoId ? { url: `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg` } : null);
 
 const getCandidateSummary = (metrics) => {
   const parts = [];
@@ -123,7 +124,10 @@ const VideoTable = ({
       {videos.map((video) => {
         const metrics = video.metrics || getVideoMetrics(video);
         const thumbnail =
-          video.snippet.thumbnails?.medium || video.snippet.thumbnails?.high || video.snippet.thumbnails?.default;
+          video.snippet.thumbnails?.medium ||
+          video.snippet.thumbnails?.high ||
+          video.snippet.thumbnails?.default ||
+          getFallbackThumbnail(video.videoId);
         const isSaved = savedVideoIds.includes(video.videoId) || video.isSaved === true;
         const isHidden = hiddenVideoIds.includes(video.videoId);
         const isReviewed = reviewedVideoIds.includes(video.videoId) || video.isReviewed === true;

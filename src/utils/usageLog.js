@@ -21,6 +21,8 @@ export const getTrackedVideoIds = async () => {
 
 export const createUsageSnapshot = (video, context = {}) => {
   const metrics = video.metrics || getVideoMetrics(video);
+  const thumbnail =
+    video.snippet?.thumbnails?.medium || video.snippet?.thumbnails?.high || video.snippet?.thumbnails?.default;
 
   return {
     videoId: video.videoId,
@@ -30,6 +32,7 @@ export const createUsageSnapshot = (video, context = {}) => {
     channelTitle: video.snippet?.channelTitle || video.channelTitle || '',
     searchedKeyword: video.searchedKeyword || '',
     searchedKeywordNote: video.searchedKeywordNote || '',
+    thumbnailUrl: thumbnail?.url || '',
     categoryId: context.categoryId || video.categoryId || '',
     activeTab: context.activeTab || video.activeTab || '',
     viewCount: metrics.views,

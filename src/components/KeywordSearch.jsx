@@ -147,7 +147,7 @@ const usageLogToVideo = (log) => {
       channelTitle: log.channelTitle || '',
       channelId: log.channelId || '',
       publishedAt: log.snapshotAt || new Date().toISOString(),
-      thumbnails: {},
+      thumbnails: log.thumbnailUrl ? { medium: { url: log.thumbnailUrl } } : {},
     },
     contentDetails: {
       duration: `PT${Math.round(Math.max(Number(log.durationMinutes || 0), 0))}M`,
@@ -196,7 +196,11 @@ const KeywordSearch = ({ activeTab }) => {
   const isArchive = activeTab === 'archive';
 
   useEffect(() => {
-    if (isArchive) return;
+    if (isArchive) {
+      setError('');
+      setProgress('');
+      return;
+    }
 
     setFilters((prev) => {
       const nextFilters = {
@@ -234,7 +238,29 @@ const KeywordSearch = ({ activeTab }) => {
   );
   const usageLogVideoIds = useMemo(() => activeUsageLogs.map((log) => log.videoId), [activeUsageLogs]);
   const archiveVideos = useMemo(() => {
-    const logVideos = activeUsageLogs.map(usageLogToVideo);
+    const savedVideoMap = new Map(savedVideos.map((video) => [video.videoId, video]));
+    const logVideos = activeUsageLogs.map((log) => {
+      const logVideo = usageLogToVideo(log);
+      const savedVideo = savedVideoMap.get(log.videoId);
+
+      if (!savedVideo) return logVideo;
+
+      const logThumbnails = logVideo.snippet?.thumbnails || {};
+      const savedThumbnails = savedVideo.snippet?.thumbnails || {};
+      const mergedThumbnails = Object.keys(logThumbnails).length > 0 ? logThumbnails : savedThumbnails;
+
+      return {
+        ...savedVideo,
+        ...logVideo,
+        isSaved: logVideo.isSaved || true,
+        snippet: {
+          ...savedVideo.snippet,
+          ...logVideo.snippet,
+          thumbnails: mergedThumbnails,
+        },
+        contentDetails: logVideo.contentDetails || savedVideo.contentDetails,
+      };
+    });
     const savedOnlyVideos = savedVideos
       .filter((video) => !usageLogVideoIds.includes(video.videoId))
       .map((video) => ({ ...video, isSaved: true }));
