@@ -201,7 +201,7 @@ const SearchFilters = ({
               onChange={(event) => onFilterChange('maxKeywords', event.target.value)}
             >
               <option value="5">가볍게</option>
-              <option value="8">보통</option>
+              <option value="8">기본</option>
               <option value="12">넓게</option>
               <option value="16">아주 넓게</option>
             </SelectBox>
