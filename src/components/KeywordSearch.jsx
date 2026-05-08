@@ -122,6 +122,23 @@ const normalizeQueryKey = (query) =>
     .normalize('NFKC')
     .replace(/\s+/g, '')
     .replace(/[^\p{L}\p{N}]/gu, '');
+const normalizeSearchText = (text) => String(text || '').toLowerCase().normalize('NFKC');
+const includesAnyTerm = (text, terms = []) =>
+  terms.some((term) => normalizeSearchText(term).trim() && text.includes(normalizeSearchText(term).trim()));
+
+const passesTopicRelevance = (video, preset) => {
+  const relevance = preset?.relevance;
+  if (!relevance) return true;
+
+  const searchText = normalizeSearchText(
+    [video.snippet?.title, video.snippet?.description, video.snippet?.channelTitle].filter(Boolean).join(' ')
+  );
+
+  if (includesAnyTerm(searchText, relevance.excludeAny)) return false;
+  if (relevance.includeAny?.length && !includesAnyTerm(searchText, relevance.includeAny)) return false;
+
+  return true;
+};
 
 const getOverseasLanguages = (value) => {
   if (value === 'both') return ['en', 'ja'];
@@ -484,7 +501,10 @@ const KeywordSearch = ({ activeTab }) => {
           const detailsResult = await getVideoDetails(videoIds);
           nextCacheStats = mergeCacheStats(nextCacheStats, detailsResult.cache);
           const details = detailsResult.data;
-          const channelIds = [...new Set(details.map((video) => video.snippet.channelId))];
+          const relevantDetails = details.filter((video) => passesTopicRelevance(video, selectedPreset));
+          if (relevantDetails.length === 0) continue;
+
+          const channelIds = [...new Set(relevantDetails.map((video) => video.snippet.channelId))];
           const channelsResult = await getChannelInfo(channelIds);
           nextCacheStats = mergeCacheStats(nextCacheStats, channelsResult.cache);
           const channelMap = Object.fromEntries(
@@ -499,7 +519,7 @@ const KeywordSearch = ({ activeTab }) => {
             ])
           );
 
-          details.forEach((video) => {
+          relevantDetails.forEach((video) => {
             const channel = channelMap[video.snippet.channelId] || {};
             collected.push(
               enrichVideo(
