@@ -13,6 +13,7 @@ import VideoTable from './VideoTable';
 const STORAGE_KEYS = {
   saved: 'seniorFinder.savedVideos',
   hidden: 'seniorFinder.hiddenVideos',
+  hiddenSnapshots: 'seniorFinder.hiddenVideoSnapshots',
 };
 
 const tabProfiles = {
@@ -101,6 +102,12 @@ const readStoredArray = (key) => {
   }
 };
 
+const readStoredHiddenVideoIds = () => {
+  const hiddenIds = readStoredArray(STORAGE_KEYS.hidden);
+  const hiddenSnapshots = readStoredArray(STORAGE_KEYS.hiddenSnapshots);
+  return Array.from(new Set([...hiddenIds, ...hiddenSnapshots.map((video) => video.videoId).filter(Boolean)]));
+};
+
 const mergeCacheStats = (stats, cache) => ({
   hits: stats.hits + (cache?.hit || 0),
   misses: stats.misses + (cache?.miss || 0),
@@ -116,6 +123,8 @@ const getKeywordText = (keyword) => (typeof keyword === 'string' ? keyword : key
 const getKeywordNote = (keyword) => (typeof keyword === 'string' ? '' : keyword?.note || '');
 const getCategoryLabel = (categoryId) =>
   topicPresets.find((preset) => preset.id === categoryId)?.label || '카테고리 없음';
+const getVideoCategoryId = (video, fallbackCategoryId = '') => video.categoryId || fallbackCategoryId || '';
+const getVideoActiveTab = (video, fallbackActiveTab = '') => video.activeTab || fallbackActiveTab || '';
 const normalizeQueryKey = (query) =>
   query
     .toLowerCase()
@@ -201,7 +210,8 @@ const KeywordSearch = ({ activeTab }) => {
   const [appliedFiltersByTab, setAppliedFiltersByTab] = useState(() => createTabState(createInitialFilters));
   const [resultsByTab, setResultsByTab] = useState(() => createTabState(() => []));
   const [savedVideos, setSavedVideos] = useState(() => readStoredArray(STORAGE_KEYS.saved));
-  const [hiddenVideoIds, setHiddenVideoIds] = useState(() => readStoredArray(STORAGE_KEYS.hidden));
+  const [hiddenVideoIds, setHiddenVideoIds] = useState(readStoredHiddenVideoIds);
+  const [hiddenVideos, setHiddenVideos] = useState(() => readStoredArray(STORAGE_KEYS.hiddenSnapshots));
   const [usageLogs, setUsageLogs] = useState([]);
   const [reviewedVideoIds, setReviewedVideoIds] = useState([]);
   const [trackedVideoIds, setTrackedVideoIds] = useState([]);
@@ -285,8 +295,8 @@ const KeywordSearch = ({ activeTab }) => {
       .filter((video) => !usageLogVideoIds.includes(video.videoId))
       .map((video) => ({ ...video, isSaved: true }));
 
-    return [...logVideos, ...savedOnlyVideos];
-  }, [activeUsageLogs, savedVideos, usageLogVideoIds]);
+    return [...logVideos, ...savedOnlyVideos].filter((video) => !hiddenVideoIds.includes(video.videoId));
+  }, [activeUsageLogs, savedVideos, usageLogVideoIds, hiddenVideoIds]);
   const archiveCategoryCounts = useMemo(() => {
     const counts = new Map();
     archiveVideos.forEach((video) => {
@@ -551,6 +561,8 @@ const KeywordSearch = ({ activeTab }) => {
                   searchedKeywordNote: queryItem.note,
                   searchedLanguage: queryItem.language,
                   searchedLanguageLabel: queryItem.languageLabel,
+                  activeTab: searchTab,
+                  categoryId: searchFilters.presetId,
                 }
               )
             );
@@ -579,16 +591,16 @@ const KeywordSearch = ({ activeTab }) => {
   };
 
   const getSnapshotContext = (video) => ({
-    activeTab: isArchive ? video.activeTab : activeTab,
-    categoryId: isArchive ? video.categoryId : appliedFilters.presetId,
+    activeTab: getVideoActiveTab(video, isArchive ? video.activeTab : activeTab),
+    categoryId: getVideoCategoryId(video, isArchive ? video.categoryId : appliedFilters.presetId),
   });
 
   const saveVideo = async (video) => {
     const willSave = !(savedVideoIds.includes(video.videoId) || video.isSaved === true);
     const savedVideo = {
       ...video,
-      activeTab: isArchive ? video.activeTab : activeTab,
-      categoryId: isArchive ? video.categoryId : appliedFilters.presetId,
+      activeTab: getVideoActiveTab(video, isArchive ? video.activeTab : activeTab),
+      categoryId: getVideoCategoryId(video, isArchive ? video.categoryId : appliedFilters.presetId),
     };
 
     setSavedVideos((prev) => {
@@ -607,9 +619,26 @@ const KeywordSearch = ({ activeTab }) => {
   };
 
   const hideVideo = (video) => {
+    const isAlreadyHidden = hiddenVideoIds.includes(video.videoId);
+    const hiddenVideo = {
+      ...video,
+      activeTab: getVideoActiveTab(video, isArchive ? video.activeTab : activeTab),
+      categoryId: getVideoCategoryId(video, isArchive ? video.categoryId : appliedFilters.presetId),
+      excludedAt: new Date().toISOString(),
+      isHidden: !isAlreadyHidden,
+    };
+
     setHiddenVideoIds((prev) => {
-      const next = Array.from(new Set([video.videoId, ...prev]));
+      const next = isAlreadyHidden ? prev.filter((videoId) => videoId !== video.videoId) : Array.from(new Set([video.videoId, ...prev]));
       localStorage.setItem(STORAGE_KEYS.hidden, JSON.stringify(next));
+      return next;
+    });
+
+    setHiddenVideos((prev) => {
+      const next = isAlreadyHidden
+        ? prev.filter((item) => item.videoId !== video.videoId)
+        : [hiddenVideo, ...prev.filter((item) => item.videoId !== video.videoId)];
+      localStorage.setItem(STORAGE_KEYS.hiddenSnapshots, JSON.stringify(next));
       return next;
     });
   };
@@ -617,6 +646,8 @@ const KeywordSearch = ({ activeTab }) => {
   const restoreHiddenVideos = () => {
     setHiddenVideoIds([]);
     localStorage.setItem(STORAGE_KEYS.hidden, JSON.stringify([]));
+    setHiddenVideos([]);
+    localStorage.setItem(STORAGE_KEYS.hiddenSnapshots, JSON.stringify([]));
   };
 
   const handleClearCache = async () => {
@@ -645,8 +676,31 @@ const KeywordSearch = ({ activeTab }) => {
     return getFilterBreakdown(results, appliedFilters);
   }, [isArchive, results, hiddenVideoIds, appliedFilters]);
 
+  const reusableCandidateVideos = useMemo(() => {
+    if (isArchive) return [];
+
+    const activeVideoIds = new Set(results.map((video) => video.videoId));
+    const candidateCategoryId = appliedFilters.presetId;
+    const reusablePool = Object.entries(resultsByTab)
+      .filter(([tabId]) => tabId !== stateTab)
+      .flatMap(([, tabResults]) => tabResults)
+      .filter(
+        (video) =>
+          video.categoryId === candidateCategoryId &&
+          !activeVideoIds.has(video.videoId)
+      );
+    const uniqueVideos = Array.from(new Map(reusablePool.map((video) => [video.videoId, video])).values());
+    const reusableBreakdown = getFilterBreakdown(uniqueVideos, appliedFilters);
+
+    return sortVideos(reusableBreakdown.finalVideos, appliedFilters);
+  }, [isArchive, results, resultsByTab, stateTab, appliedFilters, hiddenVideoIds]);
+
   const visibleVideos = useMemo(() => {
     if (isArchive) {
+      if (archiveCategoryId === 'hidden') {
+        return hiddenVideos;
+      }
+
       const filteredVideos =
         archiveCategoryId === 'all'
           ? archiveVideos
@@ -656,7 +710,7 @@ const KeywordSearch = ({ activeTab }) => {
     }
 
     return sortVideos(filterBreakdown?.finalVideos || [], appliedFilters);
-  }, [isArchive, archiveVideos, archiveCategoryId, filterBreakdown, appliedFilters]);
+  }, [isArchive, archiveVideos, archiveCategoryId, hiddenVideos, filterBreakdown, appliedFilters]);
 
   const hiddenSubscriberVideos = useMemo(() => {
     if (isArchive) return [];
@@ -829,6 +883,19 @@ const KeywordSearch = ({ activeTab }) => {
                   {getCategoryLabel('')} {archiveCategoryCounts.get('uncategorized').toLocaleString('ko-KR')}
                 </button>
               )}
+              {hiddenVideos.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setArchiveCategoryId('hidden')}
+                  className={`min-h-10 rounded-md px-3 py-2 text-xs font-bold transition ${
+                    archiveCategoryId === 'hidden'
+                      ? 'bg-rose-600 text-white'
+                      : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                  }`}
+                >
+                  제외 {hiddenVideos.length.toLocaleString('ko-KR')}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -923,14 +990,41 @@ const KeywordSearch = ({ activeTab }) => {
           trackedVideoIds={trackedVideoIds}
           emptyMessage={
             isArchive
-              ? '보관함에 저장, 확인함, 추적 중 영상이 없습니다.'
+              ? archiveCategoryId === 'hidden'
+                ? '제외한 후보가 없습니다.'
+                : '보관함에 저장, 확인함, 추적 중 영상이 없습니다.'
               : loading
                 ? progress || '검색 중입니다. 키워드별 후보 영상을 수집하고 있습니다.'
                 : hasSearched
                   ? '검색은 끝났지만 현재 필터를 통과한 영상이 없습니다. 기간, 조회수, 길이, 구독자 조건을 완화해보세요.'
-                  : '현재 카테고리와 검색 조건을 확인한 뒤 후보 찾기를 눌러 영상을 수집해보세요.'
+                  : reusableCandidateVideos.length > 0
+                    ? '이 탭에서 직접 검색한 결과는 없습니다. 아래 재활용 후보는 기존 검색 결과에서 가져왔습니다.'
+                    : '현재 카테고리와 검색 조건을 확인한 뒤 후보 찾기를 눌러 영상을 수집해보세요.'
           }
         />
+
+        {!isArchive && reusableCandidateVideos.length > 0 && (
+          <div className="space-y-2">
+            <div>
+              <h3 className="text-sm font-black text-slate-950">기존 검색에서 조건에 맞는 후보</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                다른 탭에서 이미 가져온 같은 카테고리 영상 중 현재 탭 필터를 통과한 후보입니다. API를 추가로 호출하지 않았습니다.
+              </p>
+            </div>
+            <VideoTable
+              videos={reusableCandidateVideos}
+              onSave={saveVideo}
+              onHide={hideVideo}
+              onToggleReviewed={toggleReviewedVideo}
+              onToggleTracked={toggleTrackedVideo}
+              savedVideoIds={savedVideoIds}
+              hiddenVideoIds={hiddenVideoIds}
+              reviewedVideoIds={reviewedVideoIds}
+              trackedVideoIds={trackedVideoIds}
+              emptyMessage="기존 검색 결과에서 재활용할 후보가 없습니다."
+            />
+          </div>
+        )}
 
         {!isArchive && showHiddenSubscriberVideos && hiddenSubscriberVideos.length > 0 && (
           <div className="space-y-2">

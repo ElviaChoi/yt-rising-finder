@@ -37,6 +37,7 @@ const CandidateActions = ({
   onToggleReviewed,
   onToggleTracked,
   className = '',
+  isHidden = false,
 }) => (
   <div className={`mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap ${className}`}>
     {onToggleReviewed && (
@@ -76,9 +77,11 @@ const CandidateActions = ({
       <button
         type="button"
         onClick={() => onHide(video)}
-        className="min-h-9 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-200"
+        className={`min-h-9 rounded-md px-3 py-2 text-xs font-bold transition ${
+          isHidden ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+        }`}
       >
-        제외
+        {isHidden ? '복원' : '제외'}
       </button>
     )}
   </div>
@@ -182,6 +185,7 @@ const VideoTable = ({
                     isSaved={isSaved}
                     isReviewed={isReviewed}
                     isTracked={isTracked}
+                    isHidden={isHidden}
                     onSave={onSave}
                     onHide={onHide}
                     onToggleReviewed={onToggleReviewed}
