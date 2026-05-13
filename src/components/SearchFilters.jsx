@@ -31,7 +31,7 @@ const lengthLabels = {
 };
 
 const selectClassName =
-  'w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-2 pr-10 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
+  'w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-2.5 pr-10 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
 
 const FieldLabel = ({ icon, children }) => (
   <span className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
@@ -80,20 +80,20 @@ const SearchFilters = ({
 
   return (
     <aside className="min-w-0 space-y-5">
-      <section className="rounded-lg border border-rose-200 bg-white p-4 shadow-sm">
+      <section className="rounded-lg border border-rose-200 bg-white p-3 shadow-sm sm:p-4">
         <div className="mb-3">
           <h2 className="text-lg font-bold text-slate-950">소재 카테고리</h2>
           <p className="mt-1 text-sm leading-5 text-slate-500">
             주제별 영상 수요를 작은 채널 롱폼 기회 필터로 검증합니다.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
           {topicPresets.map((preset) => (
             <button
               key={preset.id}
               type="button"
               onClick={() => onPresetSelect(preset)}
-              className={`rounded-md border px-3 py-2 text-left text-sm font-semibold transition ${
+              className={`min-h-11 rounded-md border px-3 py-2 text-left text-sm font-semibold leading-5 transition ${
                 filters.presetId === preset.id
                   ? 'border-rose-500 bg-rose-50 text-rose-700'
                   : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
@@ -106,7 +106,7 @@ const SearchFilters = ({
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-slate-950">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 text-sm text-blue-700">
             Q
@@ -129,7 +129,7 @@ const SearchFilters = ({
               value={filters.keyword}
               onChange={(event) => onFilterChange('keyword', event.target.value)}
               placeholder="예: 은퇴 생활비, 세계경제, 인간관계"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </label>
 
@@ -148,7 +148,7 @@ const SearchFilters = ({
             <p className="mt-1 text-xs text-slate-500">{selectedExpansion?.hint}</p>
           </label>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
               <FieldLabel icon="D">기간</FieldLabel>
               <SelectBox
@@ -216,7 +216,7 @@ const SearchFilters = ({
               type="button"
               onClick={onRunSearch}
               disabled={loading}
-              className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:bg-slate-300"
+              className="w-full rounded-md bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:bg-slate-300"
             >
               {loading ? progress || '검색 중' : '이 조건으로 후보 찾기'}
             </button>
@@ -232,7 +232,7 @@ const SearchFilters = ({
               <button
                 type="button"
                 onClick={onClearCache}
-                className="rounded bg-slate-100 px-2 py-1 font-bold text-slate-600 transition hover:bg-slate-200"
+                className="rounded bg-slate-100 px-2.5 py-1.5 font-bold text-slate-600 transition hover:bg-slate-200"
               >
                 캐시 비우기
               </button>
@@ -255,7 +255,7 @@ const SearchFilters = ({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
               <FieldLabel icon="V">최소 조회수</FieldLabel>
               <SelectBox
@@ -285,7 +285,7 @@ const SearchFilters = ({
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
               <FieldLabel icon="L">영상 길이</FieldLabel>
               <SelectBox
@@ -323,7 +323,7 @@ const SearchFilters = ({
             type="button"
             onClick={onApplyFilters}
             disabled={!hasResults}
-            className="w-full rounded-md bg-rose-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-rose-700 disabled:bg-slate-300 disabled:text-slate-500"
+            className="w-full rounded-md bg-rose-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-rose-700 disabled:bg-slate-300 disabled:text-slate-500"
           >
             필터 적용
           </button>

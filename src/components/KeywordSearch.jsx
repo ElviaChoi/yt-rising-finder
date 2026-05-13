@@ -685,7 +685,7 @@ const KeywordSearch = ({ activeTab }) => {
   };
 
   return (
-    <div className="mx-auto grid w-full max-w-[1500px] grid-cols-1 gap-5 overflow-x-hidden px-4 py-6 sm:px-6 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] lg:px-8">
+    <div className="mx-auto grid w-full max-w-[1500px] grid-cols-1 gap-4 overflow-x-hidden px-3 py-4 sm:gap-5 sm:px-6 sm:py-6 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] lg:px-8">
       <SearchFilters
         filters={filters}
         onFilterChange={handleFilterChange}
@@ -704,11 +704,11 @@ const KeywordSearch = ({ activeTab }) => {
       />
 
       <section className="min-w-0 space-y-5">
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <p className="text-sm font-bold text-blue-700">{selectedPreset.label}</p>
-              <h2 className="mt-1 text-2xl font-black text-slate-950">
+              <h2 className="mt-1 text-xl font-black leading-7 text-slate-950 sm:text-2xl">
                 {isArchive ? '후보 보관함' : activeProfile.title}
               </h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
@@ -718,13 +718,13 @@ const KeywordSearch = ({ activeTab }) => {
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 sm:flex sm:flex-wrap">
               {!isArchive && (
                 <button
                   type="button"
                   onClick={runSearch}
                   disabled={loading}
-                  className="rounded-md bg-blue-50 px-5 py-2.5 text-sm font-bold text-blue-700 shadow-sm ring-1 ring-blue-100 transition hover:bg-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+                  className="w-full rounded-md bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 shadow-sm ring-1 ring-blue-100 transition hover:bg-blue-100 disabled:bg-slate-100 disabled:text-slate-400 sm:w-auto sm:py-2.5"
                 >
                   {loading ? progress || '검색 중' : '후보 찾기'}
                 </button>
@@ -733,7 +733,7 @@ const KeywordSearch = ({ activeTab }) => {
                 type="button"
                 onClick={exportResults}
                 disabled={visibleVideos.length === 0}
-                className="rounded-md bg-slate-950 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:bg-slate-300"
+                className="w-full rounded-md bg-slate-950 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:bg-slate-300 sm:w-auto sm:py-2.5"
               >
                 CSV 다운로드
               </button>
@@ -741,7 +741,7 @@ const KeywordSearch = ({ activeTab }) => {
                 <button
                   type="button"
                   onClick={restoreHiddenVideos}
-                  className="rounded-md bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-200"
+                  className="w-full rounded-md bg-slate-100 px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-200 sm:w-auto sm:py-2.5"
                 >
                   제외 초기화
                 </button>
@@ -757,18 +757,18 @@ const KeywordSearch = ({ activeTab }) => {
         )}
 
         {isArchive && archiveVideos.length > 0 && (
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
             <div className="mb-3">
               <p className="text-sm font-black text-slate-950">카테고리별 보관함</p>
               <p className="mt-1 text-xs leading-5 text-slate-500">
                 저장, 확인함, 추적 중 후보를 발견 당시 카테고리 기준으로 나눠 봅니다.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 sm:flex sm:flex-wrap">
               <button
                 type="button"
                 onClick={() => setArchiveCategoryId('all')}
-                className={`rounded-md px-3 py-2 text-xs font-bold transition ${
+                className={`min-h-10 rounded-md px-3 py-2 text-xs font-bold transition ${
                   archiveCategoryId === 'all'
                     ? 'bg-slate-950 text-white'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -783,7 +783,7 @@ const KeywordSearch = ({ activeTab }) => {
                     key={preset.id}
                     type="button"
                     onClick={() => setArchiveCategoryId(preset.id)}
-                    className={`rounded-md px-3 py-2 text-xs font-bold transition ${
+                    className={`min-h-10 rounded-md px-3 py-2 text-xs font-bold transition ${
                       archiveCategoryId === preset.id
                         ? 'bg-blue-600 text-white'
                         : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
@@ -796,7 +796,7 @@ const KeywordSearch = ({ activeTab }) => {
                 <button
                   type="button"
                   onClick={() => setArchiveCategoryId('uncategorized')}
-                  className={`rounded-md px-3 py-2 text-xs font-bold transition ${
+                  className={`min-h-10 rounded-md px-3 py-2 text-xs font-bold transition ${
                     archiveCategoryId === 'uncategorized'
                       ? 'bg-amber-600 text-white'
                       : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
@@ -810,7 +810,7 @@ const KeywordSearch = ({ activeTab }) => {
         )}
 
         {!isArchive && results.length > 0 && filterBreakdown && (
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-sm font-black text-slate-950">필터 통과 현황</p>
@@ -820,14 +820,14 @@ const KeywordSearch = ({ activeTab }) => {
                 <button
                   type="button"
                   onClick={() => setShowHiddenSubscriberVideos((prev) => !prev)}
-                  className="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-200"
+                  className="rounded-md bg-slate-100 px-3 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-200"
                 >
                   구독자 미공개 {hiddenSubscriberVideos.length.toLocaleString('ko-KR')}개{' '}
                   {showHiddenSubscriberVideos ? '접기' : '보기'}
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
               {[
                 ['수집 원본', rawSearchCount || filterBreakdown.raw],
                 ['중복 제거 후', filterBreakdown.raw],
@@ -853,30 +853,30 @@ const KeywordSearch = ({ activeTab }) => {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-6">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
             <p className="text-xs font-bold text-slate-500">결과</p>
-            <p className="mt-1 text-2xl font-black text-slate-950">{summary.count.toLocaleString('ko-KR')}</p>
+            <p className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">{summary.count.toLocaleString('ko-KR')}</p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
             <p className="text-xs font-bold text-slate-500">평균 조회/구독</p>
-            <p className="mt-1 text-2xl font-black text-slate-950">{summary.avgRatio.toFixed(1)}배</p>
+            <p className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">{summary.avgRatio.toFixed(1)}배</p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
             <p className="text-xs font-bold text-slate-500">보관함</p>
-            <p className="mt-1 text-2xl font-black text-slate-950">{summary.savedCount.toLocaleString('ko-KR')}</p>
+            <p className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">{summary.savedCount.toLocaleString('ko-KR')}</p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
             <p className="text-xs font-bold text-slate-500">확인함</p>
-            <p className="mt-1 text-2xl font-black text-slate-950">{summary.reviewedCount.toLocaleString('ko-KR')}</p>
+            <p className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">{summary.reviewedCount.toLocaleString('ko-KR')}</p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
             <p className="text-xs font-bold text-slate-500">추적 중</p>
-            <p className="mt-1 text-2xl font-black text-slate-950">{summary.trackedCount.toLocaleString('ko-KR')}</p>
+            <p className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">{summary.trackedCount.toLocaleString('ko-KR')}</p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
             <p className="text-xs font-bold text-slate-500">제외</p>
-            <p className="mt-1 text-2xl font-black text-slate-950">{summary.hiddenCount.toLocaleString('ko-KR')}</p>
+            <p className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">{summary.hiddenCount.toLocaleString('ko-KR')}</p>
           </div>
         </div>
 

@@ -7,12 +7,12 @@ const tabs = [
 
 const Navigation = ({ activeTab, onTabChange }) => {
   return (
-    <nav className="flex gap-2 overflow-x-auto pb-1">
+    <nav className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0">
       {tabs.map((tab) => (
         <button
           key={tab.id}
           onClick={() => onTabChange(tab.id)}
-          className={`whitespace-nowrap rounded-md px-4 py-2 text-sm font-semibold transition ${
+          className={`min-h-10 shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold transition sm:px-4 ${
             activeTab === tab.id
               ? 'bg-slate-950 text-white shadow-sm'
               : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100'

@@ -37,12 +37,12 @@ const CandidateActions = ({
   onToggleReviewed,
   onToggleTracked,
 }) => (
-  <div className="mt-3 flex flex-wrap gap-2">
+  <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
     {onToggleReviewed && (
       <button
         type="button"
         onClick={() => onToggleReviewed(video)}
-        className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+        className={`min-h-9 rounded-md px-3 py-2 text-xs font-bold transition ${
           isReviewed ? 'bg-blue-100 text-blue-800' : 'bg-slate-950 text-white hover:bg-slate-800'
         }`}
       >
@@ -53,7 +53,7 @@ const CandidateActions = ({
       <button
         type="button"
         onClick={() => onToggleTracked(video)}
-        className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+        className={`min-h-9 rounded-md px-3 py-2 text-xs font-bold transition ${
           isTracked ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
         }`}
       >
@@ -64,7 +64,7 @@ const CandidateActions = ({
       <button
         type="button"
         onClick={() => onSave(video)}
-        className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+        className={`min-h-9 rounded-md px-3 py-2 text-xs font-bold transition ${
           isSaved ? 'bg-amber-100 text-amber-800' : 'bg-blue-600 text-white hover:bg-blue-700'
         }`}
       >
@@ -75,7 +75,7 @@ const CandidateActions = ({
       <button
         type="button"
         onClick={() => onHide(video)}
-        className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-200"
+        className="min-h-9 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-200"
       >
         제외
       </button>
@@ -113,7 +113,7 @@ const VideoTable = ({
 }) => {
   if (!videos || videos.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 bg-white px-6 py-16 text-center text-slate-500">
+      <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-12 text-center text-sm leading-6 text-slate-500 sm:px-6 sm:py-16">
         {emptyMessage || '현재 조건을 통과한 영상이 없습니다. 조건을 완화해보세요.'}
       </div>
     );
@@ -136,11 +136,11 @@ const VideoTable = ({
         return (
           <article
             key={video.videoId}
-            className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition ${
+            className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition sm:p-4 ${
               isHidden ? 'opacity-60' : 'hover:border-blue-200 hover:bg-blue-50/30'
             }`}
           >
-            <div className="grid gap-3 lg:grid-cols-[170px_minmax(0,1fr)]">
+            <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)] lg:grid-cols-[170px_minmax(0,1fr)]">
               {thumbnail && (
                 <a
                   href={`https://www.youtube.com/watch?v=${video.videoId}`}
@@ -151,7 +151,7 @@ const VideoTable = ({
                   <img
                     src={thumbnail.url}
                     alt={video.snippet.title}
-                    className="aspect-video w-full rounded-md object-cover ring-1 ring-slate-200 lg:w-[170px]"
+                    className="aspect-video w-full rounded-md object-cover ring-1 ring-slate-200 sm:w-[180px] lg:w-[170px]"
                   />
                 </a>
               )}
@@ -224,7 +224,7 @@ const VideoTable = ({
                   </p>
                 )}
 
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+                <div className="mt-3 grid grid-cols-2 gap-2 min-[480px]:grid-cols-4 xl:grid-cols-8">
                   <MetricItem
                     label="후보점수"
                     value={metrics.risingScore}
