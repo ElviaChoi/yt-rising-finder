@@ -184,17 +184,22 @@ const usageLogToVideo = (log) => {
   };
 };
 
-const KeywordSearch = ({ activeTab }) => {
-  const initialFilters = {
-    presetId: initialPreset.id,
-    keyword: '',
-    duration: '90',
-    ...tabProfiles.rising.filters,
-  };
+const getTabProfile = (tabId) => tabProfiles[tabId] || tabProfiles.rising;
 
-  const [filters, setFilters] = useState(initialFilters);
-  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
-  const [results, setResults] = useState([]);
+const createInitialFilters = (tabId = 'rising') => ({
+  presetId: initialPreset.id,
+  keyword: '',
+  duration: '90',
+  ...getTabProfile(tabId).filters,
+});
+
+const createTabState = (factory) =>
+  Object.fromEntries(Object.keys(tabProfiles).map((tabId) => [tabId, factory(tabId)]));
+
+const KeywordSearch = ({ activeTab }) => {
+  const [filtersByTab, setFiltersByTab] = useState(() => createTabState(createInitialFilters));
+  const [appliedFiltersByTab, setAppliedFiltersByTab] = useState(() => createTabState(createInitialFilters));
+  const [resultsByTab, setResultsByTab] = useState(() => createTabState(() => []));
   const [savedVideos, setSavedVideos] = useState(() => readStoredArray(STORAGE_KEYS.saved));
   const [hiddenVideoIds, setHiddenVideoIds] = useState(() => readStoredArray(STORAGE_KEYS.hidden));
   const [usageLogs, setUsageLogs] = useState([]);
@@ -203,31 +208,29 @@ const KeywordSearch = ({ activeTab }) => {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
-  const [hasSearched, setHasSearched] = useState(false);
-  const [rawSearchCount, setRawSearchCount] = useState(0);
-  const [showHiddenSubscriberVideos, setShowHiddenSubscriberVideos] = useState(false);
-  const [cacheStats, setCacheStats] = useState(emptyCacheStats);
+  const [hasSearchedByTab, setHasSearchedByTab] = useState(() => createTabState(() => false));
+  const [rawSearchCountByTab, setRawSearchCountByTab] = useState(() => createTabState(() => 0));
+  const [showHiddenSubscriberVideosByTab, setShowHiddenSubscriberVideosByTab] = useState(() =>
+    createTabState(() => false)
+  );
+  const [cacheStatsByTab, setCacheStatsByTab] = useState(() => createTabState(() => emptyCacheStats));
   const [archiveCategoryId, setArchiveCategoryId] = useState('all');
 
-  const activeProfile = tabProfiles[activeTab] || tabProfiles.rising;
+  const stateTab = tabProfiles[activeTab] ? activeTab : 'rising';
+  const activeProfile = getTabProfile(activeTab);
   const isArchive = activeTab === 'archive';
+  const filters = filtersByTab[stateTab] || createInitialFilters(stateTab);
+  const appliedFilters = appliedFiltersByTab[stateTab] || filters;
+  const results = resultsByTab[stateTab] || [];
+  const hasSearched = hasSearchedByTab[stateTab] || false;
+  const rawSearchCount = rawSearchCountByTab[stateTab] || 0;
+  const showHiddenSubscriberVideos = showHiddenSubscriberVideosByTab[stateTab] || false;
+  const cacheStats = cacheStatsByTab[stateTab] || emptyCacheStats;
 
   useEffect(() => {
-    if (isArchive) {
-      setError('');
-      setProgress('');
-      return;
-    }
-
-    setFilters((prev) => {
-      const nextFilters = {
-        ...prev,
-        ...activeProfile.filters,
-      };
-      setAppliedFilters(nextFilters);
-      return nextFilters;
-    });
-  }, [activeTab, activeProfile, isArchive]);
+    setError('');
+    setProgress('');
+  }, [activeTab]);
 
   const refreshUsageLogs = async () => {
     const logs = await getUsageLogs();
@@ -295,11 +298,23 @@ const KeywordSearch = ({ activeTab }) => {
   }, [archiveVideos]);
 
   const handleFilterChange = (name, value) => {
-    setFilters((prev) => ({ ...prev, [name]: value }));
+    setFiltersByTab((prev) => ({
+      ...prev,
+      [stateTab]: {
+        ...(prev[stateTab] || createInitialFilters(stateTab)),
+        [name]: value,
+      },
+    }));
   };
 
   const handlePresetSelect = (preset) => {
-    setFilters((prev) => ({ ...prev, presetId: preset.id }));
+    setFiltersByTab((prev) => ({
+      ...prev,
+      [stateTab]: {
+        ...(prev[stateTab] || createInitialFilters(stateTab)),
+        presetId: preset.id,
+      },
+    }));
   };
 
   const buildSearchQueryItems = () => {
@@ -445,7 +460,7 @@ const KeywordSearch = ({ activeTab }) => {
   };
 
   const applyCurrentFilters = () => {
-    setAppliedFilters({ ...filters });
+    setAppliedFiltersByTab((prev) => ({ ...prev, [stateTab]: { ...filters } }));
   };
 
   const runSearch = async () => {
@@ -461,15 +476,17 @@ const KeywordSearch = ({ activeTab }) => {
     }
 
     setLoading(true);
-    setHasSearched(true);
+    setHasSearchedByTab((prev) => ({ ...prev, [stateTab]: true }));
     setError('');
     setProgress('검색 준비 중');
-    setResults([]);
-    setRawSearchCount(0);
-    setCacheStats(emptyCacheStats);
-    setShowHiddenSubscriberVideos(false);
+    setResultsByTab((prev) => ({ ...prev, [stateTab]: [] }));
+    setRawSearchCountByTab((prev) => ({ ...prev, [stateTab]: 0 }));
+    setCacheStatsByTab((prev) => ({ ...prev, [stateTab]: emptyCacheStats }));
+    setShowHiddenSubscriberVideosByTab((prev) => ({ ...prev, [stateTab]: false }));
 
     try {
+      const searchTab = stateTab;
+      const searchFilters = { ...filters };
       const dateRange = getDateRange(filters.duration);
       const collected = [];
       let nextCacheStats = { ...emptyCacheStats };
@@ -544,10 +561,10 @@ const KeywordSearch = ({ activeTab }) => {
       }
 
       const uniqueVideos = Array.from(new Map(collected.map((video) => [video.videoId, video])).values());
-      setResults(uniqueVideos);
-      setAppliedFilters(filters);
-      setRawSearchCount(collected.length);
-      setCacheStats(nextCacheStats);
+      setResultsByTab((prev) => ({ ...prev, [searchTab]: uniqueVideos }));
+      setAppliedFiltersByTab((prev) => ({ ...prev, [searchTab]: searchFilters }));
+      setRawSearchCountByTab((prev) => ({ ...prev, [searchTab]: collected.length }));
+      setCacheStatsByTab((prev) => ({ ...prev, [searchTab]: nextCacheStats }));
     } catch (searchError) {
       console.error(searchError);
       if (searchError.response?.status === 403) {
@@ -604,7 +621,7 @@ const KeywordSearch = ({ activeTab }) => {
 
   const handleClearCache = async () => {
     await clearApiCache();
-    setCacheStats(emptyCacheStats);
+    setCacheStatsByTab((prev) => ({ ...prev, [stateTab]: emptyCacheStats }));
   };
 
   const toggleReviewedVideo = async (video) => {
@@ -716,6 +733,13 @@ const KeywordSearch = ({ activeTab }) => {
                   ? '저장, 확인함, 추적 중으로 표시한 후보를 스냅샷 기준으로 다시 확인합니다. 데이터는 이 브라우저에만 저장됩니다.'
                   : activeProfile.description}
               </p>
+              {!isArchive && (
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  {hasSearched
+                    ? `${activeProfile.title} 탭의 마지막 검색 결과를 보고 있습니다. 탭 전환만으로는 API를 호출하지 않습니다.`
+                    : '이 탭은 아직 검색하지 않았습니다. 후보 찾기를 누를 때만 API를 호출합니다.'}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 sm:flex sm:flex-wrap">
@@ -819,7 +843,12 @@ const KeywordSearch = ({ activeTab }) => {
               {hiddenSubscriberVideos.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setShowHiddenSubscriberVideos((prev) => !prev)}
+                  onClick={() =>
+                    setShowHiddenSubscriberVideosByTab((prev) => ({
+                      ...prev,
+                      [stateTab]: !showHiddenSubscriberVideos,
+                    }))
+                  }
                   className="rounded-md bg-slate-100 px-3 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-200"
                 >
                   구독자 미공개 {hiddenSubscriberVideos.length.toLocaleString('ko-KR')}개{' '}

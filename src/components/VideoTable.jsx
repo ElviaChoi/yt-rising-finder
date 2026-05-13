@@ -36,8 +36,9 @@ const CandidateActions = ({
   onHide,
   onToggleReviewed,
   onToggleTracked,
+  className = '',
 }) => (
-  <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+  <div className={`mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap ${className}`}>
     {onToggleReviewed && (
       <button
         type="button"
@@ -157,7 +158,7 @@ const VideoTable = ({
               )}
 
               <div className="min-w-0">
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_224px] xl:items-start">
                   <div className="min-w-0">
                     <a
                       href={`https://www.youtube.com/watch?v=${video.videoId}`}
@@ -185,6 +186,7 @@ const VideoTable = ({
                     onHide={onHide}
                     onToggleReviewed={onToggleReviewed}
                     onToggleTracked={onToggleTracked}
+                    className="xl:mt-0 xl:w-[224px] xl:flex-nowrap"
                   />
                 </div>
 
