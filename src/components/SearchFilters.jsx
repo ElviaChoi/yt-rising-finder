@@ -325,11 +325,11 @@ const SearchFilters = ({
             disabled={!hasResults}
             className="w-full rounded-md bg-rose-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-rose-700 disabled:bg-slate-300 disabled:text-slate-500"
           >
-            필터 적용
+            결과 필터 적용
           </button>
 
           <p className="text-xs leading-5 text-slate-500">
-            후보 찾기는 새로 검색하고, 필터 적용은 이미 검색된 결과 안에서 조건만 다시 계산합니다.
+            후보 찾기는 새로 검색하고, 결과 필터 적용은 이미 검색된 결과 안에서 조회수, 구독자, 길이, 정렬만 다시 계산합니다.
           </p>
 
           {activeTab === 'competitor' && (

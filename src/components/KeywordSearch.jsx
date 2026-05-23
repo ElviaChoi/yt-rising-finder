@@ -19,7 +19,7 @@ const STORAGE_KEYS = {
 const tabProfiles = {
   rising: {
     title: '작은 채널 롱폼 기회',
-    description: '최근 90일 안에 작은 채널이 12분 이상 롱폼으로 조회수를 만든 사례를 찾습니다.',
+    description: '최근 90일 안에 조회수를 만든 롱폼 후보에서 작은 채널 사례를 찾습니다.',
     filters: {
       minViews: '10000',
       subscriberLimit: '10000',
@@ -29,7 +29,7 @@ const tabProfiles = {
       expansionId: 'none',
       maxKeywords: '5',
     },
-    searchOrder: 'date',
+    searchOrder: 'viewCount',
     searchDurations: ['medium', 'long'],
   },
   daily: {
@@ -94,6 +94,51 @@ const emptyCacheStats = {
   quota: 0,
 };
 
+const emptySearchDiagnostics = {
+  queriesRun: 0,
+  searchItems: 0,
+  detailedVideos: 0,
+  qualityFilteredOut: 0,
+  relevanceFilteredOut: 0,
+};
+
+const searchParameterKeys = [
+  'presetId',
+  'keyword',
+  'duration',
+  'countryCode',
+  'expansionId',
+  'maxKeywords',
+  'overseasLanguage',
+];
+
+const resultFilterKeys = ['minViews', 'subscriberLimit', 'length', 'sortBy'];
+
+const hasDifferentValue = (left = {}, right = {}, keys = []) =>
+  keys.some((key) => String(left[key] ?? '') !== String(right[key] ?? ''));
+
+const getYoutubeErrorReason = (error) =>
+  error.response?.data?.error?.errors?.[0]?.reason || error.response?.data?.error?.status || '';
+
+const getSearchErrorMessage = (error, { estimatedQuota = 0, partialCount = 0 } = {}) => {
+  const status = error.response?.status;
+  const reason = getYoutubeErrorReason(error);
+  const partialText =
+    partialCount > 0 ? ` 제한 전까지 모은 후보 ${partialCount.toLocaleString('ko-KR')}개는 화면에 남겼습니다.` : '';
+
+  if (status === 429) {
+    return `YouTube API가 단시간 요청량을 제한했습니다(429). 현재 조건은 최대 ${estimatedQuota.toLocaleString(
+      'ko-KR'
+    )} quota를 쓸 수 있습니다. 검색량을 줄이거나 직접 키워드 1개로 먼저 확인한 뒤 잠시 후 다시 시도해주세요.${partialText}`;
+  }
+
+  if (status === 403) {
+    return `YouTube API 키, 권한, 일일 할당량을 확인해주세요.${reason ? ` 사유: ${reason}.` : ''}${partialText}`;
+  }
+
+  return `검색 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}${partialText}`;
+};
+
 const readStoredArray = (key) => {
   try {
     return JSON.parse(localStorage.getItem(key) || '[]');
@@ -131,17 +176,100 @@ const normalizeQueryKey = (query) =>
     .normalize('NFKC')
     .replace(/\s+/g, '')
     .replace(/[^\p{L}\p{N}]/gu, '');
-const normalizeSearchText = (text) => String(text || '').toLowerCase().normalize('NFKC');
-const includesAnyTerm = (text, terms = []) =>
-  terms.some((term) => normalizeSearchText(term).trim() && text.includes(normalizeSearchText(term).trim()));
+const stripDecorativeUnicode = (text) =>
+  String(text || '').replace(/[\u{1D400}-\u{1D7FF}]/gu, (char) => {
+    const code = char.codePointAt(0);
+    const ranges = [
+      [0x1d400, 0x1d419, 0x41],
+      [0x1d41a, 0x1d433, 0x61],
+      [0x1d434, 0x1d44d, 0x41],
+      [0x1d44e, 0x1d467, 0x61],
+      [0x1d468, 0x1d481, 0x41],
+      [0x1d482, 0x1d49b, 0x61],
+      [0x1d5a0, 0x1d5b9, 0x41],
+      [0x1d5ba, 0x1d5d3, 0x61],
+      [0x1d5d4, 0x1d5ed, 0x41],
+      [0x1d5ee, 0x1d607, 0x61],
+      [0x1d608, 0x1d621, 0x41],
+      [0x1d622, 0x1d63b, 0x61],
+      [0x1d63c, 0x1d655, 0x41],
+      [0x1d656, 0x1d66f, 0x61],
+      [0x1d670, 0x1d689, 0x41],
+      [0x1d68a, 0x1d6a5, 0x61],
+      [0x1d7ce, 0x1d7d7, 0x30],
+      [0x1d7d8, 0x1d7e1, 0x30],
+      [0x1d7e2, 0x1d7eb, 0x30],
+      [0x1d7ec, 0x1d7f5, 0x30],
+      [0x1d7f6, 0x1d7ff, 0x30],
+    ];
+    const range = ranges.find(([start, end]) => code >= start && code <= end);
+    return range ? String.fromCharCode(range[2] + code - range[0]) : char;
+  });
+
+const normalizeSearchText = (text) =>
+  stripDecorativeUnicode(text)
+    .normalize('NFKC')
+    .toLowerCase();
+
+const compactSearchText = (text) => normalizeSearchText(text).replace(/[^\p{L}\p{N}]/gu, '');
+
+const includesAnyTerm = (text, terms = []) => {
+  const normalizedText = normalizeSearchText(text);
+  const compactText = compactSearchText(text);
+
+  return terms.some((term) => {
+    const normalizedTerm = normalizeSearchText(term).trim();
+    if (!normalizedTerm) return false;
+    return normalizedText.includes(normalizedTerm) || compactText.includes(compactSearchText(term));
+  });
+};
+
+const lowValueFormatTerms = [
+  '플레이리스트',
+  'playlist',
+  'play list',
+  '모음',
+  '모음집',
+  '몰아보기',
+  '몰아듣기',
+  '모아듣기',
+  '연속재생',
+  '연속 재생',
+  '전편 모음',
+  '통합본',
+  '오디오북',
+  '오디오 북',
+  '책읽어주는',
+  '책 읽어주는',
+  '낭독',
+  '명언',
+  '좋은글',
+  '좋은 글',
+  '수면용',
+  '수면 음악',
+  '수면 명상',
+  '잠잘 때',
+  '잠 안 올 때',
+  'asmr',
+  'bgm',
+  'ost',
+  'music playlist',
+  'audiobook',
+  'quotes',
+];
+
+const getVideoSearchText = (video) =>
+  normalizeSearchText(
+    [video.snippet?.title, video.snippet?.description, video.snippet?.channelTitle].filter(Boolean).join(' ')
+  );
+
+const passesQualityFormat = (video) => !includesAnyTerm(getVideoSearchText(video), lowValueFormatTerms);
 
 const passesTopicRelevance = (video, preset) => {
   const relevance = preset?.relevance;
   if (!relevance) return true;
 
-  const searchText = normalizeSearchText(
-    [video.snippet?.title, video.snippet?.description, video.snippet?.channelTitle].filter(Boolean).join(' ')
-  );
+  const searchText = getVideoSearchText(video);
 
   if (includesAnyTerm(searchText, relevance.excludeAny)) return false;
   if (relevance.includeAny?.length && !includesAnyTerm(searchText, relevance.includeAny)) return false;
@@ -224,6 +352,9 @@ const KeywordSearch = ({ activeTab }) => {
     createTabState(() => false)
   );
   const [cacheStatsByTab, setCacheStatsByTab] = useState(() => createTabState(() => emptyCacheStats));
+  const [searchDiagnosticsByTab, setSearchDiagnosticsByTab] = useState(() =>
+    createTabState(() => emptySearchDiagnostics)
+  );
   const [archiveCategoryId, setArchiveCategoryId] = useState('all');
 
   const stateTab = tabProfiles[activeTab] ? activeTab : 'rising';
@@ -236,6 +367,7 @@ const KeywordSearch = ({ activeTab }) => {
   const rawSearchCount = rawSearchCountByTab[stateTab] || 0;
   const showHiddenSubscriberVideos = showHiddenSubscriberVideosByTab[stateTab] || false;
   const cacheStats = cacheStatsByTab[stateTab] || emptyCacheStats;
+  const searchDiagnostics = searchDiagnosticsByTab[stateTab] || emptySearchDiagnostics;
 
   useEffect(() => {
     setError('');
@@ -257,6 +389,15 @@ const KeywordSearch = ({ activeTab }) => {
     () => topicPresets.find((preset) => preset.id === filters.presetId) || initialPreset,
     [filters.presetId]
   );
+  const appliedPreset = useMemo(
+    () => topicPresets.find((preset) => preset.id === appliedFilters.presetId) || selectedPreset,
+    [appliedFilters.presetId, selectedPreset]
+  );
+  const displayPreset = !isArchive && hasSearched ? appliedPreset : selectedPreset;
+  const hasPendingSearchChanges =
+    !isArchive && hasSearched && hasDifferentValue(filters, appliedFilters, searchParameterKeys);
+  const hasPendingResultFilterChanges =
+    !isArchive && hasSearched && hasDifferentValue(filters, appliedFilters, resultFilterKeys);
 
   const savedVideoIds = useMemo(() => savedVideos.map((video) => video.videoId), [savedVideos]);
   const activeUsageLogs = useMemo(
@@ -453,6 +594,7 @@ const KeywordSearch = ({ activeTab }) => {
       reference: referenceVideos.length,
       final: finalVideos.length,
       finalVideos,
+      referenceVideos,
       hiddenSubscriberVideos,
     };
   };
@@ -470,7 +612,16 @@ const KeywordSearch = ({ activeTab }) => {
   };
 
   const applyCurrentFilters = () => {
-    setAppliedFiltersByTab((prev) => ({ ...prev, [stateTab]: { ...filters } }));
+    setAppliedFiltersByTab((prev) => {
+      const previousFilters = prev[stateTab] || createInitialFilters(stateTab);
+      const nextFilters = { ...previousFilters };
+
+      resultFilterKeys.forEach((key) => {
+        nextFilters[key] = filters[key];
+      });
+
+      return { ...prev, [stateTab]: nextFilters };
+    });
   };
 
   const runSearch = async () => {
@@ -492,16 +643,29 @@ const KeywordSearch = ({ activeTab }) => {
     setResultsByTab((prev) => ({ ...prev, [stateTab]: [] }));
     setRawSearchCountByTab((prev) => ({ ...prev, [stateTab]: 0 }));
     setCacheStatsByTab((prev) => ({ ...prev, [stateTab]: emptyCacheStats }));
+    setSearchDiagnosticsByTab((prev) => ({ ...prev, [stateTab]: emptySearchDiagnostics }));
     setShowHiddenSubscriberVideosByTab((prev) => ({ ...prev, [stateTab]: false }));
 
-    try {
-      const searchTab = stateTab;
-      const searchFilters = { ...filters };
-      const dateRange = getDateRange(filters.duration);
-      const collected = [];
-      let nextCacheStats = { ...emptyCacheStats };
-      const searchDurations = activeProfile.searchDurations || [undefined];
+    const searchTab = stateTab;
+    const searchFilters = { ...filters };
+    const dateRange = getDateRange(filters.duration);
+    const collected = [];
+    let nextCacheStats = { ...emptyCacheStats };
+    let nextSearchDiagnostics = { ...emptySearchDiagnostics };
+    const searchDurations = activeProfile.searchDurations || [undefined];
+    const estimatedQuota = queries.length * searchDurations.length * 100;
+    const commitCollectedResults = () => {
+      const uniqueVideos = Array.from(new Map(collected.map((video) => [video.videoId, video])).values());
+      setResultsByTab((prev) => ({ ...prev, [searchTab]: uniqueVideos }));
+      setAppliedFiltersByTab((prev) => ({ ...prev, [searchTab]: searchFilters }));
+      setRawSearchCountByTab((prev) => ({ ...prev, [searchTab]: nextSearchDiagnostics.detailedVideos }));
+      setCacheStatsByTab((prev) => ({ ...prev, [searchTab]: nextCacheStats }));
+      setSearchDiagnosticsByTab((prev) => ({ ...prev, [searchTab]: nextSearchDiagnostics }));
 
+      return uniqueVideos.length;
+    };
+
+    try {
       for (let index = 0; index < queries.length; index += 1) {
         const queryItem = queries[index];
         const query = queryItem.query;
@@ -515,20 +679,28 @@ const KeywordSearch = ({ activeTab }) => {
             keyword: query,
             regionCode: queryItem.regionCode || filters.countryCode,
             relevanceLanguage: queryItem.relevanceLanguage || activeProfile.relevanceLanguage,
-            maxResults: activeTab === 'keyword' ? 40 : 30,
+            maxResults: activeTab === 'rising' ? 50 : activeTab === 'keyword' ? 40 : 30,
             order: activeProfile.searchOrder || 'relevance',
             videoDuration,
             ...dateRange,
           });
           nextCacheStats = mergeCacheStats(nextCacheStats, searchResult.cache);
+          nextSearchDiagnostics.queriesRun += 1;
 
-          const videoIds = (searchResult.data.items || []).map((item) => item.id.videoId).filter(Boolean);
+          const searchItems = searchResult.data.items || [];
+          nextSearchDiagnostics.searchItems += searchItems.length;
+
+          const videoIds = searchItems.map((item) => item.id.videoId).filter(Boolean);
           if (videoIds.length === 0) continue;
 
           const detailsResult = await getVideoDetails(videoIds);
           nextCacheStats = mergeCacheStats(nextCacheStats, detailsResult.cache);
           const details = detailsResult.data;
-          const relevantDetails = details.filter((video) => passesTopicRelevance(video, selectedPreset));
+          nextSearchDiagnostics.detailedVideos += details.length;
+          const qualityDetails = details.filter(passesQualityFormat);
+          nextSearchDiagnostics.qualityFilteredOut += details.length - qualityDetails.length;
+          const relevantDetails = qualityDetails.filter((video) => passesTopicRelevance(video, selectedPreset));
+          nextSearchDiagnostics.relevanceFilteredOut += qualityDetails.length - relevantDetails.length;
           if (relevantDetails.length === 0) continue;
 
           const channelIds = [...new Set(relevantDetails.map((video) => video.snippet.channelId))];
@@ -572,18 +744,11 @@ const KeywordSearch = ({ activeTab }) => {
         }
       }
 
-      const uniqueVideos = Array.from(new Map(collected.map((video) => [video.videoId, video])).values());
-      setResultsByTab((prev) => ({ ...prev, [searchTab]: uniqueVideos }));
-      setAppliedFiltersByTab((prev) => ({ ...prev, [searchTab]: searchFilters }));
-      setRawSearchCountByTab((prev) => ({ ...prev, [searchTab]: collected.length }));
-      setCacheStatsByTab((prev) => ({ ...prev, [searchTab]: nextCacheStats }));
+      commitCollectedResults();
     } catch (searchError) {
       console.error(searchError);
-      if (searchError.response?.status === 403) {
-        setError('YouTube API 키, 권한, 일일 할당량을 확인해주세요.');
-      } else {
-        setError(`검색 중 오류가 발생했습니다: ${searchError.message || '알 수 없는 오류'}`);
-      }
+      const partialCount = commitCollectedResults();
+      setError(getSearchErrorMessage(searchError, { estimatedQuota, partialCount }));
     } finally {
       setLoading(false);
       setProgress('');
@@ -717,6 +882,14 @@ const KeywordSearch = ({ activeTab }) => {
     return sortVideos(filterBreakdown?.hiddenSubscriberVideos || [], appliedFilters);
   }, [isArchive, filterBreakdown, appliedFilters]);
 
+  const referenceCandidateVideos = useMemo(() => {
+    if (isArchive || appliedFilters.subscriberLimit !== '10000') return [];
+    return sortVideos(filterBreakdown?.referenceVideos || [], appliedFilters);
+  }, [isArchive, filterBreakdown, appliedFilters]);
+
+  const shouldShowReferenceCandidates =
+    !isArchive && !loading && visibleVideos.length === 0 && referenceCandidateVideos.length > 0;
+
   const summary = useMemo(() => {
     const top = visibleVideos[0];
     const avgRatio =
@@ -778,7 +951,7 @@ const KeywordSearch = ({ activeTab }) => {
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
-              <p className="text-sm font-bold text-blue-700">{selectedPreset.label}</p>
+              <p className="text-sm font-bold text-blue-700">{displayPreset.label}</p>
               <h2 className="mt-1 text-xl font-black leading-7 text-slate-950 sm:text-2xl">
                 {isArchive ? '후보 보관함' : activeProfile.title}
               </h2>
@@ -792,6 +965,17 @@ const KeywordSearch = ({ activeTab }) => {
                   {hasSearched
                     ? `${activeProfile.title} 탭의 마지막 검색 결과를 보고 있습니다. 탭 전환만으로는 API를 호출하지 않습니다.`
                     : '이 탭은 아직 검색하지 않았습니다. 후보 찾기를 누를 때만 API를 호출합니다.'}
+                </p>
+              )}
+              {hasPendingSearchChanges && (
+                <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-800">
+                  카테고리, 검색어, 기간, 국가 같은 검색 조건이 바뀌었습니다. 현재 결과는 마지막 검색 기준인
+                  {' '}{appliedPreset.label} 결과입니다. 새 조건은 후보 찾기를 눌러 다시 검색해야 반영됩니다.
+                </p>
+              )}
+              {hasPendingResultFilterChanges && !hasPendingSearchChanges && (
+                <p className="mt-2 rounded-md bg-blue-50 px-3 py-2 text-xs font-semibold leading-5 text-blue-800">
+                  조회수, 구독자, 길이, 정렬 조건이 바뀌었습니다. 필터 적용을 누르면 현재 결과 안에서 다시 계산합니다.
                 </p>
               )}
             </div>
@@ -831,6 +1015,46 @@ const KeywordSearch = ({ activeTab }) => {
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
             {error}
+          </div>
+        )}
+
+        {!isArchive && hasSearched && searchDiagnostics.queriesRun > 0 && (
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-slate-950">검색 진단</p>
+                <p className="text-xs leading-5 text-slate-500">
+                  API 검색, 상세 조회, 형식 필터, 카테고리 관련성 필터 중 어디에서 후보가 줄었는지 확인합니다.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {[
+                ['검색 호출', searchDiagnostics.queriesRun],
+                ['API 검색 결과', searchDiagnostics.searchItems],
+                ['상세 조회', searchDiagnostics.detailedVideos],
+                ['형식 제외', searchDiagnostics.qualityFilteredOut],
+                ['관련성 제외', searchDiagnostics.relevanceFilteredOut],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-md bg-slate-50 px-3 py-2">
+                  <p className="text-[11px] font-bold text-slate-500">{label}</p>
+                  <p className="mt-1 text-lg font-black text-slate-950">
+                    {Number(value).toLocaleString('ko-KR')}
+                  </p>
+                </div>
+              ))}
+            </div>
+            {searchDiagnostics.qualityFilteredOut > 0 && (
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                형식 제외는 플레이리스트, 모음, 통합본, 오디오북, 낭독, 수면용, ASMR처럼 소재 조사 가치가 낮은 포맷입니다.
+              </p>
+            )}
+            {searchDiagnostics.relevanceFilteredOut > 0 && (
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                관련성 제외는 선택한 카테고리의 include/exclude 키워드에 맞지 않아 빠진 영상입니다. 심리학/뇌과학 소재는
+                전용 카테고리로 검색하면 이 단계에서 덜 빠집니다.
+              </p>
+            )}
           </div>
         )}
 
@@ -923,13 +1147,14 @@ const KeywordSearch = ({ activeTab }) => {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-7">
               {[
                 ['수집 원본', rawSearchCount || filterBreakdown.raw],
-                ['중복 제거 후', filterBreakdown.raw],
+                ['관련성/중복 후', filterBreakdown.raw],
                 ['길이 통과', filterBreakdown.afterLength],
                 ['조회수 통과', filterBreakdown.afterViews],
                 ['1만 이하', filterBreakdown.strong],
+                ['1~3만 참고', filterBreakdown.reference],
                 ['최종 후보', filterBreakdown.final],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-md bg-slate-50 px-3 py-2">
@@ -996,12 +1221,43 @@ const KeywordSearch = ({ activeTab }) => {
               : loading
                 ? progress || '검색 중입니다. 키워드별 후보 영상을 수집하고 있습니다.'
                 : hasSearched
-                  ? '검색은 끝났지만 현재 필터를 통과한 영상이 없습니다. 기간, 조회수, 길이, 구독자 조건을 완화해보세요.'
+                  ? searchDiagnostics.detailedVideos > 0 && searchDiagnostics.qualityFilteredOut >= searchDiagnostics.detailedVideos
+                    ? '검색은 되었지만 플레이리스트, 모음, 오디오북, 낭독 같은 형식이라 모두 제외됐습니다. 검색어를 더 구체적으로 바꿔보세요.'
+                    : searchDiagnostics.detailedVideos > 0 &&
+                        searchDiagnostics.qualityFilteredOut + searchDiagnostics.relevanceFilteredOut >= searchDiagnostics.detailedVideos
+                    ? '검색은 되었지만 선택한 카테고리 관련성 필터에서 모두 제외됐습니다. 카테고리를 바꾸거나 직접 키워드를 더 구체적으로 입력해보세요.'
+                    : shouldShowReferenceCandidates
+                      ? '1만 이하 작은 채널은 없지만, 1만~3만 구독자 참고 후보가 아래에 있습니다. 이 정도까지 넓히면 소재 검증은 가능합니다.'
+                    : '검색은 끝났지만 현재 필터를 통과한 영상이 없습니다. 기간, 조회수, 길이, 구독자 조건을 완화해보세요.'
                   : reusableCandidateVideos.length > 0
                     ? '이 탭에서 직접 검색한 결과는 없습니다. 아래 재활용 후보는 기존 검색 결과에서 가져왔습니다.'
                     : '현재 카테고리와 검색 조건을 확인한 뒤 후보 찾기를 눌러 영상을 수집해보세요.'
           }
         />
+
+        {shouldShowReferenceCandidates && (
+          <div className="space-y-2">
+            <div>
+              <h3 className="text-sm font-black text-slate-950">1만~3만 구독자 참고 후보</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                엄격한 1만 이하 조건에는 걸리지 않았지만, 조회수와 길이를 통과한 준작은 채널 후보입니다. 소재 수요와 제목 패턴을
+                판단하기에는 이 구간도 유용합니다.
+              </p>
+            </div>
+            <VideoTable
+              videos={referenceCandidateVideos}
+              onSave={saveVideo}
+              onHide={hideVideo}
+              onToggleReviewed={toggleReviewedVideo}
+              onToggleTracked={toggleTrackedVideo}
+              savedVideoIds={savedVideoIds}
+              hiddenVideoIds={hiddenVideoIds}
+              reviewedVideoIds={reviewedVideoIds}
+              trackedVideoIds={trackedVideoIds}
+              emptyMessage="1만~3만 구독자 참고 후보가 없습니다."
+            />
+          </div>
+        )}
 
         {!isArchive && reusableCandidateVideos.length > 0 && (
           <div className="space-y-2">
